@@ -4,7 +4,14 @@ printfn "Hello from F#"
 open FParsec
 
 type AlgebraicExpression =
-    | ANumber of float
+    | AInt64 of int64
+    | AFloat of float
+    | AString of string
+    | AEmpty
+    //| AAtom of string ;;Atoms are identifiers which occur in program and were not describedas names or marks or infix notations.
+    // Would be introduced in the CST later on probably. By default we parse all identifiers as identifiers.s
+    | AIdentifier of string
+    | AVal of string
 
 type MarkArity =
     | KnownArity of uint32
@@ -21,10 +28,9 @@ type Statement =
     | SNamesDeclaration of string list
 
 let str s = pstring s
-let ws = spaces
 
-let isAsciiIdStart    = fun c -> isAsciiLetter c || c = '_'
-let isAsciiIdContinue = fun c -> isAsciiLetter c || isDigit c || c = '_'
+let isAsciiIdStart    = fun c -> isAsciiLetter c || c = '_' || c = '`'
+let isAsciiIdContinue = fun c -> isAsciiLetter c || isDigit c || c = '_' || c = '`'
 let aplanIdentifierOptions =
     IdentifierOptions(
         isAsciiIdStart = isAsciiIdStart,
@@ -39,9 +45,19 @@ let floatBetweenBrackets = str "[" >>. pfloat .>> str "]"
 let manyCharsBetween popen pclose pchar = popen >>? manyCharsTill pchar pclose
 let anyStringBetween popen pclose = manyCharsBetween popen pclose anyChar
 let quotedString = skipChar '"' |> anyStringBetween <| skipChar '"'
-let number = pfloat |>> ANumber
+let signChar: Parser<char, unit> =
+    satisfy
+        (fun x ->
+            (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
+            || (isAsciiLetter x))
+let anySignBetween popen pclose = manyCharsBetween popen pclose signChar
+let infixNotation = skipChar '"' |> anySignBetween <| skipChar '"'
+let multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
+let ws = spaces .>> multiLineComment .>> spaces
+let int64Number = pint64 |>> AInt64
+let floatNumber = pfloat |>> AFloat
 
-let identifiersList = sepBy aplanIdentifier (spaces >>. pstring "," .>> spaces)
+let identifiersList = sepBy aplanIdentifier (ws >>. pstring "," .>> ws)
 let namesDeclaration = str "NAMES" >>. pstring " " >>. ws >>. identifiersList |>> SNamesDeclaration
 let arity: Parser<MarkArity, unit> =
     ((puint32 |>> KnownArity)
@@ -54,22 +70,35 @@ let genericMarkDescriptionElement =
 let binaryMarkDescriptionElement =
     tuple4
         (aplanIdentifier .>> spaces)
-        (pstring "(" .>> spaces >>. puint32 .>> spaces)
-        (str "," .>> spaces >>. puint32 .>> spaces)
-        (str "," .>> spaces >>. quotedString .>> spaces .>> pstring ")")
+        (str "(" .>> ws >>. puint32 .>> ws)
+        (str "," .>> ws >>. puint32 .>> ws)
+        (str "," .>> ws >>. quotedString .>> ws .>> str ")")
         |>> BinaryMark
 let markDescriptionElement =
     attempt genericMarkDescriptionElement <|> binaryMarkDescriptionElement
-let markDescriptionElementList = sepBy markDescriptionElement (spaces >>. pstring "," .>> spaces)
+let markDescriptionElementList = sepBy markDescriptionElement (ws >>. pstring "," .>> ws)
 let markDescription =
     pstring "MARK" >>. spaces >>. markDescriptionElementList |>> MarkDescription
+
+// Expressions
+let primaryExpression =
+    (int64Number)
+    <|> (floatNumber)
+    <|> (quotedString |>> AString)
+    <|> (aplanIdentifier |>> AIdentifier)
+    <|> ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
+    <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
+
+let algebraicExpression =
+    primaryExpression
 
 let test p str =
     match run p str with
     | Success(result, _, _)   -> printfn "Success: %A" result
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
 
-test number "1.25"
+test int64Number "1"
+test floatNumber "1.25"
 test floatBetweenBrackets "[1.25]"
 test namesDeclaration "NAMES S"
 test namesDeclaration "NAMES S1,S2"
@@ -80,3 +109,13 @@ test markDescriptionElement "X(3)"
 test markDescriptionElement "X(UNDEF)"
 test markDescriptionElement "comma( 2,  7, \",\")"
 test markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\")"
+test markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")"
+test algebraicExpression "x"
+test algebraicExpression "2"
+test algebraicExpression "2.3"
+test algebraicExpression "()"
+test algebraicExpression "\"some string\""
+test algebraicExpression "VAL z"
+test algebraicExpression "(x + y)"
+test algebraicExpression "(x + y) * z"
+test algebraicExpression "(x + y) * z + w"
