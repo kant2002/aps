@@ -13,6 +13,7 @@ type AlgebraicExpression =
     | AIdentifier of string
     | AVal of string
     | APrefixExpression of (string * (AlgebraicExpression list))
+    | ARewriteSystemExpression of (AlgebraicExpression list * AlgebraicExpression list)
     | AInfixExpression of AlgebraicExpression * string * AlgebraicExpression
     | AApplicationExpression of AlgebraicExpression * AlgebraicExpression
     | AArrayIndexingExpression of string * AlgebraicExpression
@@ -51,12 +52,17 @@ let anyStringBetween popen pclose = manyCharsBetween popen pclose anyChar
 let quotedString = skipChar '"' |> anyStringBetween <| skipChar '"'
 let isAplanSign =
     (fun x ->
-        (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
-        || (isAsciiLetter x))
+        (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^']))
 let signChar: Parser<char, unit> =
     satisfy isAplanSign
-let infixNotation popen pclose = manyCharsBetween popen pclose signChar
-let quotedInfixNotation = skipChar '"' |> infixNotation <| skipChar '"'
+let infixNotationInternal popen pclose = manyCharsBetween popen pclose signChar
+let infixNotation =
+    choice [
+        pstring "mod"
+        pstring "else"
+        manySatisfy isAplanSign
+    ]
+let quotedInfixNotation = pchar '"' >>. infixNotation .>> pchar '"'
 let multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
 let ws = spaces .>> opt (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
@@ -88,7 +94,7 @@ let markDescription =
 // Expressions
 let algebraicExpression, algebraicExpressionRef = createParserForwardedToRef<AlgebraicExpression, unit>()
 let primaryExpression =
-    (int64Number)
+    attempt (int64Number .>> notFollowedBy (pchar '.'))
     <|> (floatNumber)
     <|> (quotedString |>> AString)
     <|> (aplanIdentifier |>> AIdentifier)
@@ -99,7 +105,11 @@ let primaryExpression =
 let algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
 
 let prefixExpression =
-    attempt (aplanIdentifier .>> spaces .>>
+    attempt (pstring "rs" .>> spaces .>>
+        str "(" .>> spaces >>. algebraicExpressionList .>> spaces .>> str ")" .>> spaces .>>
+        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
+        |>> ARewriteSystemExpression)
+    <|> attempt (aplanIdentifier .>> spaces .>>
         str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
         |>> APrefixExpression)
     <|> attempt (aplanIdentifier .>> spaces .>>
@@ -117,7 +127,7 @@ let application =
 let infixExpression =
     tuple3
         (application .>> spaces)
-        (manySatisfy isAplanSign .>> spaces)
+        (infixNotation .>> spaces)
         (algebraicExpression .>> spaces)
         |>> AInfixExpression
 
@@ -125,7 +135,10 @@ algebraicExpressionRef := choice [ attempt infixExpression; application ]
 
 let test p str =
     match run p str with
-    | Success(result, _, _)   -> printfn "Success: %A" result
+    | Success(result, _, position) when position.Index = str.Length
+        -> printfn "Success: %A" result
+    | Success(result, _, position) when position.Index <> str.Length
+        -> printfn "Partial Success: %A, unconsumed input: %s" result (str.Substring(int32 position.Index))
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
 
 test int64Number "1"
@@ -139,6 +152,9 @@ test arity "UNDEF"
 test markDescriptionElement "X(3)"
 test markDescriptionElement "X(UNDEF)"
 test markDescriptionElement "comma( 2,  7, \",\")"
+test markDescriptionElement "comma( 2,  7, \"-->\")"
+test markDescriptionElement "comma( 2,  7, \"mod\")"
+test markDescriptionElement "comma( 2,  7, \"else\")"
 test markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\")"
 test markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")"
 test algebraicExpression "x"
@@ -158,3 +174,12 @@ test algebraicExpression "(x + y) * z"
 test algebraicExpression "(x + y) * z + w"
 test algebraicExpression "proc()loc(Term)"
 test algebraicExpression "a[5]"
+test algebraicExpression "a[5] := 10"
+test algebraicExpression "R:=rs()x"
+test algebraicExpression
+    """R:=rs(n)(
+    F(0) = 1,
+    F(1) = 1,
+    F(n) = F(n-1)+F(n-2)
+)
+    """
