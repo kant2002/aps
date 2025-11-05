@@ -12,6 +12,7 @@ type AlgebraicExpression =
     // Would be introduced in the CST later on probably. By default we parse all identifiers as identifiers.s
     | AIdentifier of string
     | AVal of string
+    | APrefixExpression of (string * (AlgebraicExpression list))
 
 type MarkArity =
     | KnownArity of uint32
@@ -50,8 +51,8 @@ let signChar: Parser<char, unit> =
         (fun x ->
             (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
             || (isAsciiLetter x))
-let anySignBetween popen pclose = manyCharsBetween popen pclose signChar
-let infixNotation = skipChar '"' |> anySignBetween <| skipChar '"'
+let infixNotation popen pclose = manyCharsBetween popen pclose signChar
+let quotedInfixNotation = skipChar '"' |> infixNotation <| skipChar '"'
 let multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
 let ws = spaces .>> multiLineComment .>> spaces
 let int64Number = pint64 |>> AInt64
@@ -72,7 +73,7 @@ let binaryMarkDescriptionElement =
         (aplanIdentifier .>> spaces)
         (str "(" .>> ws >>. puint32 .>> ws)
         (str "," .>> ws >>. puint32 .>> ws)
-        (str "," .>> ws >>. quotedString .>> ws .>> str ")")
+        (str "," .>> ws >>. quotedInfixNotation .>> ws .>> str ")")
         |>> BinaryMark
 let markDescriptionElement =
     attempt genericMarkDescriptionElement <|> binaryMarkDescriptionElement
@@ -81,16 +82,23 @@ let markDescription =
     pstring "MARK" >>. spaces >>. markDescriptionElementList |>> MarkDescription
 
 // Expressions
+let algebraicExpression, algebraicExpressionRef = createParserForwardedToRef<AlgebraicExpression, unit>()
 let primaryExpression =
     (int64Number)
     <|> (floatNumber)
     <|> (quotedString |>> AString)
     <|> (aplanIdentifier |>> AIdentifier)
-    <|> ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
     <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
+    <|> attempt ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
+    <|> (str "(" >>. algebraicExpression .>> str ")")
 
-let algebraicExpression =
-    primaryExpression
+let algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
+let prefixExpression =
+    aplanIdentifier .>> spaces .>>
+        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
+        |>> APrefixExpression
+
+algebraicExpressionRef := choice[attempt prefixExpression; primaryExpression]
 
 let test p str =
     match run p str with
@@ -116,6 +124,10 @@ test algebraicExpression "2.3"
 test algebraicExpression "()"
 test algebraicExpression "\"some string\""
 test algebraicExpression "VAL z"
+test algebraicExpression "(x)"
+test algebraicExpression "(2)"
+test algebraicExpression "F(2)"
+//test algebraicExpression "F ( 2 )"
 test algebraicExpression "(x + y)"
 test algebraicExpression "(x + y) * z"
 test algebraicExpression "(x + y) * z + w"
