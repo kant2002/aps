@@ -13,6 +13,9 @@ type AlgebraicExpression =
     | AIdentifier of string
     | AVal of string
     | APrefixExpression of (string * (AlgebraicExpression list))
+    | AInfixExpression of AlgebraicExpression * string * AlgebraicExpression
+    | AApplicationExpression of AlgebraicExpression * AlgebraicExpression
+    | AArrayIndexingExpression of string * AlgebraicExpression
 
 type MarkArity =
     | KnownArity of uint32
@@ -46,15 +49,16 @@ let floatBetweenBrackets = str "[" >>. pfloat .>> str "]"
 let manyCharsBetween popen pclose pchar = popen >>? manyCharsTill pchar pclose
 let anyStringBetween popen pclose = manyCharsBetween popen pclose anyChar
 let quotedString = skipChar '"' |> anyStringBetween <| skipChar '"'
+let isAplanSign =
+    (fun x ->
+        (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
+        || (isAsciiLetter x))
 let signChar: Parser<char, unit> =
-    satisfy
-        (fun x ->
-            (List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
-            || (isAsciiLetter x))
+    satisfy isAplanSign
 let infixNotation popen pclose = manyCharsBetween popen pclose signChar
 let quotedInfixNotation = skipChar '"' |> infixNotation <| skipChar '"'
 let multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
-let ws = spaces .>> multiLineComment .>> spaces
+let ws = spaces .>> opt (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
 let floatNumber = pfloat |>> AFloat
 
@@ -93,12 +97,31 @@ let primaryExpression =
     <|> (str "(" >>. algebraicExpression .>> str ")")
 
 let algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
-let prefixExpression =
-    aplanIdentifier .>> spaces .>>
-        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
-        |>> APrefixExpression
 
-algebraicExpressionRef := choice[attempt prefixExpression; primaryExpression]
+let prefixExpression =
+    attempt (aplanIdentifier .>> spaces .>>
+        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
+        |>> APrefixExpression)
+    <|> attempt (aplanIdentifier .>> spaces .>>
+        str "[" .>> spaces .>>. algebraicExpression .>> spaces .>> str "]"
+        |>> AArrayIndexingExpression)
+    <|> primaryExpression
+
+let application =
+    attempt (tuple2
+        (prefixExpression .>> spaces)
+        (algebraicExpression .>> spaces)
+        |>> AApplicationExpression)
+    <|> prefixExpression
+
+let infixExpression =
+    tuple3
+        (application .>> spaces)
+        (manySatisfy isAplanSign .>> spaces)
+        (algebraicExpression .>> spaces)
+        |>> AInfixExpression
+
+algebraicExpressionRef := choice [ attempt infixExpression; application ]
 
 let test p str =
     match run p str with
@@ -127,7 +150,11 @@ test algebraicExpression "VAL z"
 test algebraicExpression "(x)"
 test algebraicExpression "(2)"
 test algebraicExpression "F(2)"
+test algebraicExpression "F ( 2)"
 //test algebraicExpression "F ( 2 )"
+test infixExpression "x + y"
 test algebraicExpression "(x + y)"
 test algebraicExpression "(x + y) * z"
 test algebraicExpression "(x + y) * z + w"
+test algebraicExpression "proc()loc(Term)"
+test algebraicExpression "a[5]"
