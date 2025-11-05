@@ -31,6 +31,8 @@ type MarkDescription =
 
 type Statement =
     | SNamesDeclaration of string list
+    | SExpression of AlgebraicExpression
+    | SMarkDescription of MarkDescription
 
 let str s = pstring s
 
@@ -69,7 +71,9 @@ let int64Number = pint64 |>> AInt64
 let floatNumber = pfloat |>> AFloat
 
 let identifiersList = sepBy aplanIdentifier (ws >>. pstring "," .>> ws)
-let namesDeclaration = str "NAMES" >>. pstring " " >>. ws >>. identifiersList |>> SNamesDeclaration
+let namesDeclaration =
+    (str "NAMES" <|> str "NAME")
+        >>. pstring " " >>. ws >>. identifiersList |>> SNamesDeclaration
 let arity: Parser<MarkArity, unit> =
     ((puint32 |>> KnownArity)
     <|> (skipString "UNDEF" |>> (fun () -> UndefinedArity)))
@@ -89,7 +93,7 @@ let markDescriptionElement =
     attempt genericMarkDescriptionElement <|> binaryMarkDescriptionElement
 let markDescriptionElementList = sepBy markDescriptionElement (ws >>. pstring "," .>> ws)
 let markDescription =
-    pstring "MARK" >>. spaces >>. markDescriptionElementList |>> MarkDescription
+    (pstring "MARKS" <|> pstring "MARK") >>. spaces >>. markDescriptionElementList |>> MarkDescription
 
 // Expressions
 let algebraicExpression, algebraicExpressionRef = createParserForwardedToRef<AlgebraicExpression, unit>()
@@ -133,6 +137,16 @@ let infixExpression =
 
 algebraicExpressionRef := choice [ attempt infixExpression; application ]
 
+let statement =
+    choice [
+        markDescription .>> spaces .>> str ";" |>> SMarkDescription
+        namesDeclaration .>> spaces .>> str ";"
+        algebraicExpression .>> spaces .>> str ";" |>> SExpression
+    ]
+
+let program = sepBy statement (ws >>. pstring ";" .>> ws)
+
+
 let test p str =
     match run p str with
     | Success(result, _, position) when position.Index = str.Length
@@ -165,9 +179,10 @@ test algebraicExpression "\"some string\""
 test algebraicExpression "VAL z"
 test algebraicExpression "(x)"
 test algebraicExpression "(2)"
+test algebraicExpression "( 2 )"
 test algebraicExpression "F(2)"
 test algebraicExpression "F ( 2)"
-//test algebraicExpression "F ( 2 )"
+test algebraicExpression "F ( 2 )"
 test infixExpression "x + y"
 test algebraicExpression "(x + y)"
 test algebraicExpression "(x + y) * z"
@@ -183,3 +198,9 @@ test algebraicExpression
     F(n) = F(n-1)+F(n-2)
 )
     """
+test statement "x := 1;"
+test statement "NAME xx;"
+test statement "MARKS comma(2,3,\"mod\");"
+
+// TODO: Incorrectly parse as list of algebraic expressions
+test program "x := 1; NAME xx; MARKS comma(2,3,\"mod\");"
