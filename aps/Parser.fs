@@ -104,7 +104,7 @@ let private primaryExpression =
     <|> (aplanIdentifier |>> AIdentifier)
     <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
     <|> attempt ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
-    <|> (str "(" >>. algebraicExpression .>> str ")")
+    <|> (str "(" >>. spaces >>. algebraicExpression .>> spaces .>> str ")")
 
 let private algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
 

@@ -3,6 +3,23 @@ Algebraic Programming System
 
 This is alternate implementation of the Algebraic Programming System described in the paper Algebraic Programming System APS v.3 (A.A. Letichevsky, A.A. Letichevsky Jr., V.S. Peschanenko ).
 
+## How to build and run
+
+To build
+```
+dotnet build
+```
+
+to run
+```
+dotnet run --project aps
+```
+
+to test
+```
+dotnet test
+```
+
 ## Grammar
 
 I have to change be explicit about the grammar rules for `prefix expression`, `application`, `infix expression`, `primary expression` otherwise expression become ambiguos. I specify priority of parsing for these three expression type.

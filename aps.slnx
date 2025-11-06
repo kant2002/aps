@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="aps.tests/aps.tests.fsproj" />
+  <Project Path="aps/aps.fsproj" />
+</Solution>
