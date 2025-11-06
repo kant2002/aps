@@ -33,6 +33,7 @@ type Statement =
     | SNamesDeclaration of string list
     | SExpression of AlgebraicExpression
     | SMarkDescription of MarkDescription
+    | SEmpty
 
 let str s = pstring s
 
@@ -135,13 +136,31 @@ let infixExpression =
         (algebraicExpression .>> spaces)
         |>> AInfixExpression
 
-algebraicExpressionRef := choice [ attempt infixExpression; application ]
+let infixOperator op priority    =
+    InfixOperator(op, spaces,
+        priority, Associativity.Right,
+        fun left right -> AInfixExpression(left, op, right))
+
+let opp = new OperatorPrecedenceParser<_,_,_>()
+opp.TermParser <- application .>> spaces
+opp.AddOperator(infixOperator "+" 54)
+opp.AddOperator(infixOperator "-" 55)
+opp.AddOperator(infixOperator "*" 58)
+//opp.AddOperator(infixOperator ";" 5)
+opp.AddOperator(infixOperator "," 7)
+opp.AddOperator(infixOperator "=" 11)
+opp.AddOperator(infixOperator ":=" 20)
+
+//algebraicExpressionRef := choice [ attempt infixExpression; application ]
+algebraicExpressionRef := choice [ opp.ExpressionParser ]
 
 let statement =
     choice [
         markDescription .>> spaces .>> str ";" |>> SMarkDescription
         namesDeclaration .>> spaces .>> str ";"
         algebraicExpression .>> spaces .>> str ";" |>> SExpression
+        spaces .>> str ";" |>> fun () -> SEmpty
+        spaces |>> fun () -> SEmpty
     ]
 
 let program = sepBy statement (ws >>. pstring ";" .>> ws)
@@ -154,6 +173,16 @@ let test p str =
     | Success(result, _, position) when position.Index <> str.Length
         -> printfn "Partial Success: %A, unconsumed input: %s" result (str.Substring(int32 position.Index))
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
+
+let testProgram p str =
+    let initialPosition = 0
+    match runParserOnSubstring p () "test-stream" str initialPosition str.Length with
+    | Success(result, _, position) when position.Index = str.Length
+        -> printfn "Success: %A" result
+    | Success(result, _, position) when position.Index <> str.Length
+        -> printfn "Partial Success: %A, unconsumed input: %s" result (str.Substring(int32 position.Index))
+    | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
+    | failure -> printfn "Generic Failure: %A" failure
 
 test int64Number "1"
 test floatNumber "1.25"
@@ -191,6 +220,7 @@ test algebraicExpression "proc()loc(Term)"
 test algebraicExpression "a[5]"
 test algebraicExpression "a[5] := 10"
 test algebraicExpression "R:=rs()x"
+test algebraicExpression "F(0) = 1,F(1) = 1"
 test algebraicExpression
     """R:=rs(n)(
     F(0) = 1,
@@ -203,4 +233,4 @@ test statement "NAME xx;"
 test statement "MARKS comma(2,3,\"mod\");"
 
 // TODO: Incorrectly parse as list of algebraic expressions
-test program "x := 1; NAME xx; MARKS comma(2,3,\"mod\");"
+testProgram statement "x := 1; NAME xx; MARKS comma(2,3,\"mod\");"
