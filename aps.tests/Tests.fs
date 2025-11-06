@@ -57,7 +57,6 @@ let ``Primitive expression`` () =
     Assert.Equal(AInt64 2L, runParser algebraicExpression "(2)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "( 2 )")
 
-
 [<Fact>]
 let ``Prefix expression`` () =
     Assert.Equal(
@@ -69,3 +68,53 @@ let ``Prefix expression`` () =
     Assert.Equal(
         APrefixExpression ("F", [AInt64 2L]),
         runParser algebraicExpression "F( 2 )")
+    Assert.Equal(
+        AArrayIndexingExpression ("a", AInt64 5L),
+        runParser algebraicExpression "a[5]")
+
+[<Fact>]
+let ``Infix expression`` () =
+    Assert.Equal(
+        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        runParser algebraicExpression "x + y")
+    Assert.Equal(
+        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        runParser algebraicExpression "x +  y")
+    Assert.Equal(
+        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        runParser algebraicExpression "(x + y)")
+    Assert.Equal(
+        AInfixExpression
+            (AInfixExpression (AIdentifier "x", "+", AIdentifier "y"), "*",
+            AIdentifier "z"),
+        runParser algebraicExpression "(x + y) * z")
+    Assert.Equal(
+        AInfixExpression
+            (AInfixExpression
+                (AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+                "*",
+                AIdentifier "z"),
+            "+",
+            AIdentifier "w"),
+        runParser algebraicExpression "(x + y) * z + w")
+    Assert.Equal(
+        AInfixExpression
+            (AArrayIndexingExpression ("a", AInt64 5L), ":=", AInt64 10L),
+        runParser algebraicExpression "a[5] := 10")
+
+[<Fact>]
+let ``Application expression`` () =
+    Assert.Equal(
+        AApplicationExpression
+            (APrefixExpression ("proc", []),
+            APrefixExpression ("loc", [AIdentifier "Term"])),
+        runParser algebraicExpression "proc()loc(Term)")
+
+
+[<Fact>]
+let ``Rewrite system`` () =
+    Assert.Equal(
+        AInfixExpression
+            (AIdentifier "R", ":=",
+            AApplicationExpression (APrefixExpression ("rs", []), AIdentifier "x")),
+        runParser algebraicExpression "R:=rs()x")

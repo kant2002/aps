@@ -40,25 +40,19 @@ let testProgram p str =
 // test markDescriptionElement "comma( 2,  7, \"-->\")"
 // test markDescriptionElement "comma( 2,  7, \"mod\")"
 // test markDescriptionElement "comma( 2,  7, \"else\")"
-test algebraicExpression "x + y"
-test algebraicExpression "(x + y)"
-test algebraicExpression "(x + y) * z"
-test algebraicExpression "(x + y) * z + w"
-test algebraicExpression "proc()loc(Term)"
-test algebraicExpression "a[5]"
-test algebraicExpression "a[5] := 10"
-test algebraicExpression "R:=rs()x"
-test algebraicExpression "F(0) = 1,F(1) = 1"
-test algebraicExpression
-    """R:=rs(n)(
-    F(0) = 1,
-    F(1) = 1,
-    F(n) = F(n-1)+F(n-2)
-)
-    """
-test statement "x := 1;"
-test statement "NAME xx;"
-test statement "MARKS comma(2,3,\"mod\");"
+
+// test algebraicExpression "R:=rs()x"
+// test algebraicExpression "F(0) = 1,F(1) = 1"
+// test algebraicExpression
+//     """R:=rs(n)(
+//     F(0) = 1,
+//     F(1) = 1,
+//     F(n) = F(n-1)+F(n-2)
+// )
+//     """
+// test statement "x := 1;"
+// test statement "NAME xx;"
+// test statement "MARKS comma(2,3,\"mod\");"
 
 // TODO: Incorrectly parse as list of algebraic expressions
 testProgram statement "x := 1; NAME xx; MARKS comma(2,3,\"mod\");"
