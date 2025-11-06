@@ -73,7 +73,7 @@ let floatNumber = pfloat |>> AFloat
 
 let identifiersList = sepBy aplanIdentifier (ws >>. pstring "," .>> ws)
 let namesDeclaration =
-    (str "NAMES" <|> str "NAME")
+    ((attempt (str "NAMES")) <|> str "NAME")
         >>. pstring " " >>. ws >>. identifiersList |>> SNamesDeclaration
 let arity: Parser<MarkArity, unit> =
     ((puint32 |>> KnownArity)
@@ -155,13 +155,18 @@ opp.AddOperator(infixOperator ":=" 20)
 algebraicExpressionRef := choice [ opp.ExpressionParser ]
 
 let statement =
-    choice [
-        markDescription .>> spaces .>> str ";" |>> SMarkDescription
-        namesDeclaration .>> spaces .>> str ";"
-        algebraicExpression .>> spaces .>> str ";" |>> SExpression
-        spaces .>> str ";" |>> fun () -> SEmpty
-        spaces |>> fun () -> SEmpty
-    ]
+    spaces >>.
+        opt (choice [
+            markDescription .>> spaces .>> str ";" |>> SMarkDescription
+            namesDeclaration .>> spaces .>> str ";"
+            algebraicExpression .>> spaces .>> str ";" |>> SExpression
+            str ";" |>> fun (_) -> SEmpty
+            //spaces |>> fun () -> SEmpty
+        ])
+    |>> fun (optStatement) ->
+        match optStatement with
+        | Some statement -> statement
+        | None -> SEmpty
 
 let program = sepBy statement (ws >>. pstring ";" .>> ws)
 
@@ -175,19 +180,32 @@ let test p str =
     | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
 
 let testProgram p str =
-    let initialPosition = 0
-    match runParserOnSubstring p () "test-stream" str initialPosition str.Length with
-    | Success(result, _, position) when position.Index = str.Length
-        -> printfn "Success: %A" result
-    | Success(result, _, position) when position.Index <> str.Length
-        -> printfn "Partial Success: %A, unconsumed input: %s" result (str.Substring(int32 position.Index))
-    | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
-    | failure -> printfn "Generic Failure: %A" failure
+    let mutable initialPosition = 0
+    let mutable haveToExit = false
+    while (not haveToExit) do
+        match runParserOnSubstring p () "test-stream" str initialPosition (str.Length - initialPosition) with
+        | Success(result, _, position) when position.Index = str.Length
+            ->
+                printfn "Success: %A" result
+                haveToExit <- true
+        | Success(result, _, position) when position.Index <> str.Length
+            ->
+                if int position.Index <= initialPosition then
+                    haveToExit <- true
+                initialPosition <- initialPosition + int position.Index
+                printfn "Partial Success: %A" result
+        | Failure(errorMsg, _, _) ->
+            printfn "Failure: %s" errorMsg
+            haveToExit <- true
+        | failure ->
+            printfn "Generic Failure: %A" failure
+            haveToExit <- true
 
 test int64Number "1"
 test floatNumber "1.25"
 test floatBetweenBrackets "[1.25]"
 test namesDeclaration "NAMES S"
+test namesDeclaration "NAME S"
 test namesDeclaration "NAMES S1,S2"
 test namesDeclaration "NAMES S1, S2"
 test arity "4"
