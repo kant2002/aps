@@ -1,6 +1,7 @@
 open Parser
 open FParsec
 open System
+open System.IO
 
 let test p str =
     match run p str with
@@ -144,5 +145,17 @@ let interpretProgram streamName str =
 
 // TODO: Incorrectly parse as list of algebraic expressions
 //testProgram statement "x := 1; NAME xx; MARKS comma(2,3,\"mod\");"
-interpretProgram "test" "NAME task; task:=1;"
-interpretProgram "test" ""
+//
+// interpretProgram "test" "NAME task; task:=1;"
+// interpretProgram "test" ""
+[<EntryPoint>]
+let main(args) =
+    match args with
+    | [| fileName |] ->
+        let programCode = File.ReadAllText(fileName)
+        interpretProgram fileName programCode
+    | [||] ->
+        let programCode = Console.In.ReadToEnd()
+        interpretProgram "<stdin>" programCode
+    | _ -> printfn "Invalid arguments. aps [input-file]"
+    0
