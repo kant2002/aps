@@ -58,13 +58,13 @@ let ``Mark description`` () =
 
 [<Fact>]
 let ``Primitive expression`` () =
-    Assert.Equal(AIdentifier "x", runParser algebraicExpression "x")
+    Assert.Equal(AAtom "x", runParser algebraicExpression "x")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "2")
     Assert.Equal(AFloat 2.3, runParser algebraicExpression "2.3")
     Assert.Equal(AEmpty, runParser algebraicExpression "()")
     Assert.Equal(AString "some string", runParser algebraicExpression "\"some string\"")
     //Assert.Equal(AVal "z", runParser algebraicExpression "VAL z")
-    Assert.Equal(AIdentifier "x", runParser algebraicExpression "(x)")
+    Assert.Equal(AAtom "x", runParser algebraicExpression "(x)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "(2)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "( 2 )")
 
@@ -86,27 +86,27 @@ let ``Prefix expression`` () =
 [<Fact>]
 let ``Infix expression`` () =
     Assert.Equal(
-        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        AInfixExpression (AAtom "x", "+", AAtom "y"),
         runParser algebraicExpression "x + y")
     Assert.Equal(
-        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        AInfixExpression (AAtom "x", "+", AAtom "y"),
         runParser algebraicExpression "x +  y")
     Assert.Equal(
-        AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+        AInfixExpression (AAtom "x", "+", AAtom "y"),
         runParser algebraicExpression "(x + y)")
     Assert.Equal(
         AInfixExpression
-            (AInfixExpression (AIdentifier "x", "+", AIdentifier "y"), "*",
-            AIdentifier "z"),
+            (AInfixExpression (AAtom "x", "+", AAtom "y"), "*",
+            AAtom "z"),
         runParser algebraicExpression "(x + y) * z")
     Assert.Equal(
         AInfixExpression
             (AInfixExpression
-                (AInfixExpression (AIdentifier "x", "+", AIdentifier "y"),
+                (AInfixExpression (AAtom "x", "+", AAtom "y"),
                 "*",
-                AIdentifier "z"),
+                AAtom "z"),
             "+",
-            AIdentifier "w"),
+            AAtom "w"),
         runParser algebraicExpression "(x + y) * z + w")
     Assert.Equal(
         AInfixExpression
@@ -118,7 +118,7 @@ let ``Application expression`` () =
     Assert.Equal(
         AApplicationExpression
             (APrefixExpression ("proc", []),
-            APrefixExpression ("loc", [AIdentifier "Term"])),
+            APrefixExpression ("loc", [AAtom "Term"])),
         runParser algebraicExpression "proc()loc(Term)")
 
 
@@ -126,6 +126,6 @@ let ``Application expression`` () =
 let ``Rewrite system`` () =
     Assert.Equal(
         AInfixExpression
-            (AIdentifier "R", ":=",
-            AApplicationExpression (APrefixExpression ("rs", []), AIdentifier "x")),
+            (AAtom "R", ":=",
+            AApplicationExpression (APrefixExpression ("rs", []), AAtom "x")),
         runParser algebraicExpression "R:=rs()x")

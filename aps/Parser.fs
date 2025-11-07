@@ -7,8 +7,9 @@ type AlgebraicExpression =
     | AFloat of float
     | AString of string
     | AEmpty
-    //| AAtom of string ;;Atoms are identifiers which occur in program and were not describedas names or marks or infix notations.
-    // Would be introduced in the CST later on probably. By default we parse all identifiers as identifiers.s
+    // Atoms are identifiers which occur in program and were not describedas names or marks or infix notations.
+    // Would be introduced in the CST later on probably. By default we parse all identifiers as identifiers.
+    | AAtom of string
     | AIdentifier of string
     | AVal of string
     | APrefixExpression of (string * (AlgebraicExpression list))
@@ -32,6 +33,7 @@ type Statement =
     | SNamesDeclaration of (string * int option) list
     | SExpression of AlgebraicExpression
     | SMarkDescription of MarkDescription
+    | SAssignment of string * (int option) * AlgebraicExpression
     | SEmpty
 
 let private str s = pstring s
@@ -105,7 +107,7 @@ let private primaryExpression =
     attempt (int64Number .>> notFollowedBy (pchar '.'))
     <|> (floatNumber)
     <|> (quotedString |>> AString)
-    <|> (aplanIdentifier |>> AIdentifier)
+    <|> (aplanIdentifier |>> AAtom)
     <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
     <|> attempt ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
     <|> (str "(" >>. spaces >>. algebraicExpression .>> spaces .>> str ")")
@@ -162,13 +164,15 @@ let statement =
         opt (choice [
             markDescription .>> spaces .>> str ";" |>> SMarkDescription
             namesDeclaration .>> spaces .>> str ";"
+            tuple3
+                (aplanIdentifier .>> ws)
+                (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]"))
+                (str ":=" >>. ws >>. algebraicExpression .>> spaces .>> str ";")
+                |>> SAssignment
             algebraicExpression .>> spaces .>> str ";" |>> SExpression
             str ";" |>> fun (_) -> SEmpty
             //spaces |>> fun () -> SEmpty
         ])
-    |>> fun (optStatement) ->
-        match optStatement with
-        | Some statement -> statement
-        | None -> SEmpty
+    |>> Option.defaultValue SEmpty
 
 let program = sepBy statement (ws >>. pstring ";" .>> ws)
