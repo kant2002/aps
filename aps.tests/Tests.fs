@@ -25,10 +25,21 @@ let ``Trivial expressions`` () =
 
 [<Fact>]
 let ``Names declaration`` () =
-    Assert.Equal(SNamesDeclaration ["S"], runParser namesDeclaration "NAMES S")
-    Assert.Equal(SNamesDeclaration ["S"], runParser namesDeclaration "NAME S")
-    Assert.Equal(SNamesDeclaration ["S1";"S2"], runParser namesDeclaration "NAME S1,S2")
-    Assert.Equal(SNamesDeclaration ["S1";"S2"], runParser namesDeclaration "NAME S1, S2")
+    Assert.Equal(
+        SNamesDeclaration [("S", None)],
+        runParser namesDeclaration "NAMES S")
+    Assert.Equal(
+        SNamesDeclaration [("S", None)],
+        runParser namesDeclaration "NAME S")
+    Assert.Equal(
+        SNamesDeclaration [("arr", Some 4)],
+        runParser namesDeclaration "NAME arr[4]")
+    Assert.Equal(
+        SNamesDeclaration [("S1", None);("S2", None)],
+        runParser namesDeclaration "NAME S1,S2")
+    Assert.Equal(
+        SNamesDeclaration [("S1", None);("S2", None)],
+        runParser namesDeclaration "NAME S1, S2")
 
 [<Fact>]
 let ``Mark description`` () =

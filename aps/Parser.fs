@@ -29,7 +29,7 @@ type MarkDescription =
     | MarkDescription of MarkDescriptionElement list
 
 type Statement =
-    | SNamesDeclaration of string list
+    | SNamesDeclaration of (string * int option) list
     | SExpression of AlgebraicExpression
     | SMarkDescription of MarkDescription
     | SEmpty
@@ -70,10 +70,14 @@ let private ws = spaces .>> opt (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
 let floatNumber = pfloat |>> AFloat
 
-let private identifiersList = sepBy aplanIdentifier (ws >>. pstring "," .>> ws)
+let private identifiersList =
+    sepBy
+        (aplanIdentifier .>>. opt (str "[" >>. pint32 .>> str "]"))
+        (ws >>. pstring "," .>> ws)
 let namesDeclaration =
     ((attempt (str "NAMES")) <|> str "NAME")
-        >>. pstring " " >>. ws >>. identifiersList |>> SNamesDeclaration
+        >>. pstring " " >>. ws >>. identifiersList
+        |>> SNamesDeclaration
 let arity: Parser<MarkArity, unit> =
     ((puint32 |>> KnownArity)
     <|> (skipString "UNDEF" |>> (fun () -> UndefinedArity)))
