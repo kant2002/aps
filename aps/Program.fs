@@ -84,6 +84,9 @@ let interpret env statement =
         | None ->
             printfn "Identifier %s not found" ident
             env
+    | SAtomDeclaration atoms ->
+        printfn "Atoms: %A" atoms
+        env
     | SExpression expr ->
         printfn "Expression: %A" expr
         env

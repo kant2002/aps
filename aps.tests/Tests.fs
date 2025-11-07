@@ -129,3 +129,9 @@ let ``Rewrite system`` () =
             (AAtom "R", ":=",
             AApplicationExpression (APrefixExpression ("rs", []), AAtom "x")),
         runParser algebraicExpression "R:=rs()x")
+
+[<Fact>]
+let ``Atom description`` () =
+    Assert.Equal(
+        SAtomDeclaration ["?"; "@"; "#"],
+        runParser statement "ATOMS ?,  @, /* {,  }, */ #;")
