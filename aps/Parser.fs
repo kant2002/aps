@@ -25,6 +25,7 @@ type MarkArity =
 type MarkDescriptionElement =
     | GenericMark of string * MarkArity
     | BinaryMark of string * uint32 * uint32 * string
+    | UnaryMark of string * uint32 * uint32
 
 type MarkDescription =
     | MarkDescription of MarkDescriptionElement list
@@ -39,8 +40,8 @@ type Statement =
 
 let private str s = pstring s
 
-let private isAsciiIdStart    = fun c -> isAsciiLetter c || c = '_' || c = '`'
-let private isAsciiIdContinue = fun c -> isAsciiLetter c || isDigit c || c = '_' || c = '`'
+let private isAsciiIdStart    = fun c -> isAsciiLetter c || c = '_' || c = '`' || c = '~'
+let private isAsciiIdContinue = fun c -> isAsciiLetter c || isDigit c || c = '_' || c = '`' || c = '~'
 let private aplanIdentifierOptions =
     IdentifierOptions(
         isAsciiIdStart = isAsciiIdStart,
@@ -84,7 +85,8 @@ let private infixNotationAtom =
 
 let private quotedInfixNotation = pchar '"' >>. infixNotation .>> pchar '"'
 let private multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
-let private ws = spaces .>> opt (multiLineComment .>> spaces)
+let private ws = spaces .>> many (multiLineComment .>> spaces)
+let private ws1 = spaces1 .>> many (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
 let floatNumber = pfloat |>> AFloat
 
@@ -123,11 +125,17 @@ let private binaryMarkDescriptionElement =
         (str "," .>> ws >>. puint32 .>> ws)
         (str "," .>> ws >>. quotedInfixNotation .>> ws .>> str ")")
         |>> BinaryMark
+let private unaryMarkDescriptionElement =
+    tuple3
+        (aplanIdentifier .>> spaces)
+        (str "(" .>> ws >>. puint32 .>> ws)
+        (str "," .>> ws >>. puint32 .>> ws .>> ws .>> str ")")
+        |>> UnaryMark
 let markDescriptionElement =
-    attempt genericMarkDescriptionElement <|> binaryMarkDescriptionElement
+    attempt genericMarkDescriptionElement <|> attempt binaryMarkDescriptionElement <|> unaryMarkDescriptionElement
 let markDescriptionElementList = sepBy markDescriptionElement (ws >>. pstring "," .>> ws)
 let markDescription =
-    (pstring "MARKS" <|> pstring "MARK") >>. spaces >>. markDescriptionElementList |>> MarkDescription
+    (pstring "MARKS" <|> pstring "MARK") >>. ws1 >>. markDescriptionElementList |>> MarkDescription
 
 // Expressions
 let algebraicExpression, algebraicExpressionRef = createParserForwardedToRef<AlgebraicExpression, unit>()

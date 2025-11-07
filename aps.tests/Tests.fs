@@ -47,14 +47,33 @@ let ``Mark description`` () =
         MarkDescription [
             GenericMark ("X", KnownArity 3u)
             GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")],
-        runParser markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\")")
+            BinaryMark ("comma", 2u, 7u, ",")
+            UnaryMark ("~", 1u, 20u)],
+        runParser markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\"), ~(1, 20)")
     Assert.Equal(
         MarkDescription [
             GenericMark ("X", KnownArity 3u)
             GenericMark ("X", UndefinedArity)
             BinaryMark ("comma", 2u, 7u, ",")],
         runParser markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")")
+    Assert.Equal(
+        MarkDescription [
+            GenericMark ("X", KnownArity 3u)
+            GenericMark ("X", UndefinedArity)
+            BinaryMark ("comma", 2u, 7u, ",")],
+        runParser markDescription "MARK /*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
+    Assert.Equal(
+        MarkDescription [
+            GenericMark ("X", KnownArity 3u)
+            GenericMark ("X", UndefinedArity)
+            BinaryMark ("comma", 2u, 7u, ",")],
+        runParser markDescription "MARK\n/*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
+    Assert.Equal(
+        MarkDescription [
+            GenericMark ("X", KnownArity 3u)
+            GenericMark ("X", UndefinedArity)
+            BinaryMark ("comma", 2u, 7u, ",")],
+        runParser markDescription "MARK\n/*some comment*/ /*othercomment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
 
 [<Fact>]
 let ``Primitive expression`` () =
