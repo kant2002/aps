@@ -13,7 +13,7 @@ type AlgebraicExpression =
     | AIdentifier of string
     | AVal of string
     | APrefixExpression of (string * (AlgebraicExpression list))
-    | ARewriteSystemExpression of (AlgebraicExpression list * AlgebraicExpression list)
+    | ARewriteSystemExpression of AlgebraicExpression list * AlgebraicExpression
     | AInfixExpression of AlgebraicExpression * string * AlgebraicExpression
     | AApplicationExpression of AlgebraicExpression * AlgebraicExpression
     | AArrayIndexingExpression of string * AlgebraicExpression
@@ -145,28 +145,28 @@ let private primaryExpression =
     <|> (quotedString |>> AString)
     <|> (aplanIdentifier |>> AAtom)
     <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
-    <|> attempt ((str "(" >>. spaces >>. str ")") |>> (fun (_) -> AEmpty))
-    <|> (str "(" >>. spaces >>. algebraicExpression .>> spaces .>> str ")")
+    <|> attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
+    <|> (str "(" >>. ws >>. algebraicExpression .>> ws .>> str ")")
 
 let private algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
 
 let private prefixExpression =
-    attempt (pstring "rs" .>> spaces .>>
-        str "(" .>> spaces >>. algebraicExpressionList .>> spaces .>> str ")" .>> spaces .>>
-        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
+    attempt (tuple2 (pstring "rs" .>> ws .>>
+        str "(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws)
+        algebraicExpression
         |>> ARewriteSystemExpression)
-    <|> attempt (aplanIdentifier .>> spaces .>>
-        str "(" .>> spaces .>>. algebraicExpressionList .>> spaces .>> str ")"
+    <|> attempt (aplanIdentifier .>> ws .>>
+        str "(" .>> ws .>>. algebraicExpressionList .>> ws .>> str ")"
         |>> APrefixExpression)
-    <|> attempt (aplanIdentifier .>> spaces .>>
-        str "[" .>> spaces .>>. algebraicExpression .>> spaces .>> str "]"
+    <|> attempt (aplanIdentifier .>> ws .>>
+        str "[" .>> ws .>>. algebraicExpression .>> ws .>> str "]"
         |>> AArrayIndexingExpression)
     <|> primaryExpression
 
 let private application =
     attempt (tuple2
-        (prefixExpression .>> spaces)
-        (algebraicExpression .>> spaces)
+        (prefixExpression .>> ws)
+        (algebraicExpression .>> ws)
         |>> AApplicationExpression)
     <|> prefixExpression
 
@@ -182,31 +182,36 @@ let private infixOperator op priority    =
         priority, Associativity.Right,
         fun left right -> AInfixExpression(left, op, right))
 
-let private opp = new OperatorPrecedenceParser<_,_,_>()
+let private prefixOperator op priority    =
+    PrefixOperator(op, spaces,
+        priority, false,
+        fun right -> APrefixExpression(op, [right]))
+
+let private opp = new OperatorPrecedenceParser<AlgebraicExpression,unit,unit>()
 opp.TermParser <- application .>> spaces
-opp.AddOperator(infixOperator "+" 54)
-opp.AddOperator(infixOperator "-" 55)
-opp.AddOperator(infixOperator "*" 58)
-//opp.AddOperator(infixOperator ";" 5)
-opp.AddOperator(infixOperator "," 7)
-opp.AddOperator(infixOperator "=" 11)
-opp.AddOperator(infixOperator ":=" 20)
+
+let setBinaryMark name priority symbol =
+    opp.RemoveInfixOperator(symbol) |> ignore
+    opp.AddOperator(infixOperator symbol priority)
+let setUnaryMark name priority symbol =
+    opp.RemovePrefixOperator(symbol) |> ignore
+    opp.AddOperator(prefixOperator symbol priority)
 
 //algebraicExpressionRef := choice [ attempt infixExpression; application ]
 algebraicExpressionRef := choice [ opp.ExpressionParser ]
 
 let statement =
-    spaces >>.
+    ws >>.
         opt (choice [
             markDescription .>> spaces .>> str ";" |>> SMarkDescription
             namesDeclaration .>> spaces .>> str ";"
             atomsDeclaration .>> spaces .>> str ";"
             tuple3
                 (aplanIdentifier .>> ws)
-                (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]"))
-                (str ":=" >>. ws >>. algebraicExpression .>> spaces .>> str ";")
+                (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws)
+                (str ":=" >>. ws >>. algebraicExpression .>> ws .>> str ";")
                 |>> SAssignment
-            algebraicExpression .>> spaces .>> str ";" |>> SExpression
+            //algebraicExpression .>> spaces .>> str ";" |>> SExpression
             str ";" |>> fun (_) -> SEmpty
             //spaces |>> fun () -> SEmpty
         ])

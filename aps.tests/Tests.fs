@@ -85,6 +85,7 @@ let ``Primitive expression`` () =
     //Assert.Equal(AVal "z", runParser algebraicExpression "VAL z")
     Assert.Equal(AAtom "x", runParser algebraicExpression "(x)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "(2)")
+    Assert.Equal(AInt64 2L, runParser algebraicExpression "((2))")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "( 2 )")
 
 [<Fact>]
@@ -104,6 +105,9 @@ let ``Prefix expression`` () =
 
 [<Fact>]
 let ``Infix expression`` () =
+    setBinaryMark "ADD" 54 "+"
+    setBinaryMark "MUL" 58 "*"
+
     Assert.Equal(
         AInfixExpression (AAtom "x", "+", AAtom "y"),
         runParser algebraicExpression "x + y")
@@ -127,10 +131,15 @@ let ``Infix expression`` () =
             "+",
             AAtom "w"),
         runParser algebraicExpression "(x + y) * z + w")
+
+[<Fact>]
+let ``Asignment`` () =
     Assert.Equal(
-        AInfixExpression
-            (AArrayIndexingExpression ("a", AInt64 5L), ":=", AInt64 10L),
-        runParser algebraicExpression "a[5] := 10")
+        SAssignment("b", None, AInt64 11L),
+        runParser statement "b := 11;")
+    Assert.Equal(
+        SAssignment("a", Some 5, AInt64 10L),
+        runParser statement "a[5] := 10;")
 
 [<Fact>]
 let ``Application expression`` () =
@@ -143,11 +152,23 @@ let ``Application expression`` () =
 
 [<Fact>]
 let ``Rewrite system`` () =
+    setBinaryMark "MR" 58 ">" // More (strange names in hindsight)
+
     Assert.Equal(
-        AInfixExpression
-            (AAtom "R", ":=",
-            AApplicationExpression (APrefixExpression ("rs", []), AAtom "x")),
-        runParser algebraicExpression "R:=rs()x")
+        ARewriteSystemExpression ([], AAtom "x"),
+        runParser algebraicExpression "rs()x")
+    Assert.Equal(
+        ARewriteSystemExpression ([], AAtom "x"),
+        runParser algebraicExpression "rs()\nx")
+    Assert.Equal(
+        SAssignment ("R", None,
+            ARewriteSystemExpression ([], AAtom "x")),
+        runParser statement "R:=rs()(\nx);")
+    Assert.Equal(
+        SAssignment
+            ("R", None,
+             ARewriteSystemExpression ([], AInfixExpression (AAtom "x", ">", AAtom "x"))),
+        runParser statement "R:=rs()((x>x));")
 
 [<Fact>]
 let ``Atom description`` () =

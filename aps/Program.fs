@@ -42,6 +42,7 @@ type AlgebraicValue =
     | VFloat of float
     | VString of string
     | VArray of AlgebraicValue list
+    | VRewriteSystem of string list * AlgebraicExpression
 
 type ApsEnvironment = {
     names: Map<string, AlgebraicValue>
@@ -58,6 +59,19 @@ let evaluateExpression env aExpr =
     | AFloat value -> VFloat value
     | AString value -> VString value
     | AEmpty -> VEmpty
+    | ARewriteSystemExpression (vars, rules) ->
+        let rec collectVars (initState: string list) vars =
+            match vars with
+            | AInfixExpression (left, op, right) ->
+                if (op <> ",") then
+                    raise (InvalidOperationException("Identifiers should be comma separated"))
+                else
+                    collectVars (collectVars initState left) right
+            | AAtom ident ->
+                initState |> List.append [ident]
+            | _ -> raise (InvalidOperationException("Rewrite system variables should be always identifiers"))
+        let rewriteSystemVars = collectVars [] (vars |> List.head)
+        VRewriteSystem (rewriteSystemVars, rules)
     | _ -> raise (NotImplementedException(sprintf "Cannot evaluate %A" aExpr))
 
 let interpret env statement =
@@ -92,7 +106,22 @@ let interpret env statement =
         printfn "Expression: %A" expr
         env
     | SMarkDescription marks ->
-        printfn "Marks: %A" marks
+        match marks with
+        | MarkDescription marks ->
+            for mark in marks do
+                match mark with
+                | BinaryMark (name, arity, priority, symbol) ->
+                    if arity <> 2u then
+                        printfn "Invalid arity for binary mark %s" name
+                    else
+                        setBinaryMark name (int priority) symbol
+                | UnaryMark (name, arity, priority) ->
+                    if arity <> 1u then
+                        printfn "Invalid arity for unary mark %s" name
+                    else
+                        setUnaryMark name (int priority) name
+                | _ ->
+                    printfn "Mark: %A" mark
         env
     | SEmpty -> env
 
@@ -107,7 +136,10 @@ let interpretProgram streamName str =
                 haveToExit <- true
         | Success(result, _, position) when position.Index <> str.Length
             ->
-                if int position.Index <= initialPosition then
+                //printfn "Initial: %d current %d - %A" initialPosition position.Index result
+                if (int position.Index <= 0) then
+                    if result <> SEmpty then
+                        printfn "Don't parse whole file: %A" result
                     haveToExit <- true
                 initialPosition <- initialPosition + int position.Index
                 //printfn "Partial Success: %A" result
