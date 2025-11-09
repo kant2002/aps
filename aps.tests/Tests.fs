@@ -175,3 +175,9 @@ let ``Atom description`` () =
     Assert.Equal(
         SAtomDeclaration ["?"; "@"; "#"],
         runParser statement "ATOMS ?,  @, /* {,  }, */ #;")
+
+[<Fact>]
+let ``Include statements`` () =
+    Assert.Equal(
+        SInclude "test.ap",
+        runParser statement "INCLUDE <test.ap>")

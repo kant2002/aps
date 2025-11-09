@@ -124,6 +124,9 @@ let interpret env statement =
                     printfn "Mark: %A" mark
         env
     | SEmpty -> env
+    | SInclude path ->
+        printfn "Include file from: %A" path
+        env
 
 let interpretProgram streamName str =
     let mutable initialPosition = 0

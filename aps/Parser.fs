@@ -37,6 +37,7 @@ type Statement =
     | SExpression of AlgebraicExpression
     | SAssignment of string * (int option) * AlgebraicExpression
     | SEmpty
+    | SInclude of string
 
 let private str s = pstring s
 
@@ -89,6 +90,8 @@ let private ws = spaces .>> many (multiLineComment .>> spaces)
 let private ws1 = spaces1 .>> many (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
 let floatNumber = pfloat |>> AFloat
+
+let private anglePath = pchar '<' >>. manySatisfy (fun x -> x <> '>') .>> pchar '>'
 
 // Names declaration
 let private identifiersList =
@@ -206,6 +209,7 @@ let statement =
             markDescription .>> spaces .>> str ";" |>> SMarkDescription
             namesDeclaration .>> spaces .>> str ";"
             atomsDeclaration .>> spaces .>> str ";"
+            str "INCLUDE" >>. ws >>. anglePath |>> SInclude
             tuple3
                 (aplanIdentifier .>> ws)
                 (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws)
