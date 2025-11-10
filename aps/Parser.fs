@@ -27,8 +27,7 @@ type MarkDescriptionElement =
     | BinaryMark of string * uint32 * uint32 * string
     | UnaryMark of string * uint32 * uint32
 
-type MarkDescription =
-    | MarkDescription of MarkDescriptionElement list
+type MarkDescription = MarkDescription of MarkDescriptionElement list
 
 type Statement =
     | SNamesDeclaration of (string * int option) list
@@ -40,52 +39,88 @@ type Statement =
     | SInclude of string
 
 let private str s = pstring s
+let mutable debugMode = false
+let mutable ident = 0
 
-let private isAsciiIdStart    = fun c -> isAsciiLetter c || c = '_' || c = '`' || c = '~'
-let private isAsciiIdContinue = fun c -> isAsciiLetter c || isDigit c || c = '_' || c = '`' || c = '~'
+let (<!>) (p: Parser<_, _>) label : Parser<_, _> =
+    fun stream ->
+        let identString = String.init ident (fun _ -> " ")
+
+        if debugMode then
+            printfn "%A: %s Entering %s(%d)" stream.Position identString label ident
+            ident <- ident + 2
+
+        try
+            let reply = p stream
+
+            if debugMode then
+                ident <- ident - 2
+
+                printfn
+                    "%A: %s Leaving %s(%d) (%A) (%O)"
+                    stream.Position
+                    identString
+                    label
+                    ident
+                    reply.Status
+                    reply.Result
+
+            reply
+        with ex ->
+            if debugMode then
+                ident <- ident - 2
+                printfn "%A: %s Leaving %s(%d) (Unexpected Error)" stream.Position identString label ident
+
+            Reply(Error, unexpected ex.Message)
+
+let private isAsciiIdStart =
+    fun c -> isAsciiLetter c || c = '_' || c = '`' || c = '~'
+
+let private isAsciiIdContinue =
+    fun c -> isAsciiLetter c || isDigit c || c = '_' || c = '`' || c = '~'
+
 let private aplanIdentifierOptions =
     IdentifierOptions(
         isAsciiIdStart = isAsciiIdStart,
         isAsciiIdContinue = isAsciiIdContinue,
         normalization = System.Text.NormalizationForm.FormKC,
         normalizeBeforeValidation = true,
-        allowAllNonAsciiCharsInPreCheck = true)
+        allowAllNonAsciiCharsInPreCheck = true
+    )
 
-let private aplanIdentifier : Parser<string, unit> = identifier aplanIdentifierOptions
+let private aplanIdentifier: Parser<string, unit> =
+    identifier aplanIdentifierOptions
 
 let floatBetweenBrackets: Parser<float, unit> = str "[" >>. pfloat .>> str "]"
 let private manyCharsBetween popen pclose pchar = popen >>? manyCharsTill pchar pclose
 let private anyStringBetween popen pclose = manyCharsBetween popen pclose anyChar
 let private quotedString = skipChar '"' |> anyStringBetween <| skipChar '"'
+
 let private isAplanSign =
     (fun x ->
         not (isAsciiLetter x)
         && not (isDigit x)
         && x <> ' '
         && x <> '"'
-        //(List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
-        )
+        && x <> ')'
+        && x <> '(')
+
 let private isAplanSignAtom =
-    (fun x ->
-        isAplanSign x
-        && x <> ','
-        && x <> ';'
-        //(List.contains x ['+';'-';'*';'/';'%';'|';',';';';':';'=';'>';'<';'&';'$';'^'])
-        )
-let private signChar: Parser<char, unit> =
-    satisfy isAplanSign
+    (fun x -> isAplanSign x && x <> ',' && x <> ';' && x <> ')' && x <> '(')
+
+let private signChar: Parser<char, unit> = satisfy isAplanSign
 let private infixNotationInternal popen pclose = manyCharsBetween popen pclose signChar
+
 let private infixNotation =
-    choice [
-        pstring "mod"
-        pstring "else"
-        manySatisfy isAplanSign
-    ]
-let private infixNotationAtom =
-    manySatisfy isAplanSignAtom
+    choice [ pstring "mod"; pstring "else"; manySatisfy isAplanSign ]
+
+let private infixNotationAtom = manySatisfy isAplanSignAtom
 
 let private quotedInfixNotation = pchar '"' >>. infixNotation .>> pchar '"'
-let private multiLineComment = skipString "/*" |> anyStringBetween <| skipString "*/"
+
+let private multiLineComment =
+    skipString "/*" |> anyStringBetween <| skipString "*/"
+
 let private ws = spaces .>> many (multiLineComment .>> spaces)
 let private ws1 = spaces1 .>> many (multiLineComment .>> spaces)
 let int64Number = pint64 |>> AInt64
@@ -95,130 +130,175 @@ let private anglePath = pchar '<' >>. manySatisfy (fun x -> x <> '>') .>> pchar 
 
 // Names declaration
 let private identifiersList =
-    sepBy
-        (aplanIdentifier .>>. opt (str "[" >>. pint32 .>> str "]"))
-        (ws >>. pstring "," .>> ws)
+    sepBy (aplanIdentifier .>>. opt (str "[" >>. pint32 .>> str "]")) (ws >>. pstring "," .>> ws)
+
 let namesDeclaration =
-    ((attempt (str "NAMES")) <|> str "NAME")
-        >>. pstring " " >>. ws >>. identifiersList
-        |>> SNamesDeclaration
+    ((attempt (str "NAMES")) <|> str "NAME") >>. ws1 >>. identifiersList
+    |>> SNamesDeclaration
 
 // Atom declarations
-let private signsList =
-    sepBy
-        (infixNotationAtom)
-        (ws >>. pstring "," .>> ws)
+let private signsList = sepBy (infixNotationAtom) (ws >>. pstring "," .>> ws)
+
 let atomsDeclaration =
-    ((attempt (str "ATOMS")) <|> str "ATOM")
-        >>. pstring " " >>. ws >>. signsList
-        |>> SAtomDeclaration
+    ((attempt (str "ATOMS")) <|> str "ATOM") >>. pstring " " >>. ws >>. signsList
+    |>> SAtomDeclaration
 
 // Mark descriptions
 let arity: Parser<MarkArity, unit> =
-    ((puint32 |>> KnownArity)
-    <|> (skipString "UNDEF" |>> (fun () -> UndefinedArity)))
+    ((puint32 |>> KnownArity) <|> (skipString "UNDEF" |>> (fun () -> UndefinedArity)))
 
 let private genericMarkDescriptionElement =
-    (aplanIdentifier .>> spaces .>>
-        pstring "(" .>> spaces .>>. arity .>> spaces .>> pstring ")" |>> GenericMark)
+    (aplanIdentifier .>> spaces .>> pstring "(" .>> spaces .>>. arity
+     .>> spaces
+     .>> pstring ")"
+     |>> GenericMark)
+
 let private binaryMarkDescriptionElement =
     tuple4
         (aplanIdentifier .>> spaces)
         (str "(" .>> ws >>. puint32 .>> ws)
         (str "," .>> ws >>. puint32 .>> ws)
         (str "," .>> ws >>. quotedInfixNotation .>> ws .>> str ")")
-        |>> BinaryMark
+    |>> BinaryMark
+
 let private unaryMarkDescriptionElement =
     tuple3
         (aplanIdentifier .>> spaces)
         (str "(" .>> ws >>. puint32 .>> ws)
         (str "," .>> ws >>. puint32 .>> ws .>> ws .>> str ")")
-        |>> UnaryMark
+    |>> UnaryMark
+
 let markDescriptionElement =
-    attempt genericMarkDescriptionElement <|> attempt binaryMarkDescriptionElement <|> unaryMarkDescriptionElement
-let markDescriptionElementList = sepBy markDescriptionElement (ws >>. pstring "," .>> ws)
+    attempt genericMarkDescriptionElement
+    <|> attempt binaryMarkDescriptionElement
+    <|> unaryMarkDescriptionElement
+
+let markDescriptionElementList =
+    sepBy markDescriptionElement (ws >>. pstring "," .>> ws)
+
 let markDescription =
-    (pstring "MARKS" <|> pstring "MARK") >>. ws1 >>. markDescriptionElementList |>> MarkDescription
+    (pstring "MARKS" <|> pstring "MARK") >>. ws1 >>. markDescriptionElementList
+    |>> MarkDescription
 
 // Expressions
-let algebraicExpression, algebraicExpressionRef = createParserForwardedToRef<AlgebraicExpression, unit>()
+let algebraicExpression, algebraicExpressionRef =
+    createParserForwardedToRef<AlgebraicExpression, unit> ()
+
 let private primaryExpression =
     attempt (int64Number .>> notFollowedBy (pchar '.'))
     <|> (floatNumber)
     <|> (quotedString |>> AString)
-    <|> (aplanIdentifier |>> AAtom)
+    <|> (aplanIdentifier |>> AAtom <!> "atom primary expression")
     <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
-    <|> attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
-    <|> (str "(" >>. ws >>. algebraicExpression .>> ws .>> str ")")
+    <|> (attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
+         <!> "empty primary expression")
+    <|> ((str "(" >>. ws >>. algebraicExpression .>> ws .>> str ")")
+         <!> "nested primary expression")
 
-let private algebraicExpressionList = sepBy algebraicExpression (ws >>. pstring "," .>> ws)
+let private algebraicExpressionList =
+    sepBy algebraicExpression (ws >>. pstring "," .>> ws)
+
+let rewriteExpression =
+    tuple2
+        (pstring "rs" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
+         .>> ws
+         .>> str ")"
+         .>> ws
+         <!> "rewrite paramters")
+        algebraicExpression
+    <!> "rewrite body"
+    |>> ARewriteSystemExpression
 
 let private prefixExpression =
-    attempt (tuple2 (pstring "rs" .>> ws .>>
-        str "(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws)
-        algebraicExpression
-        |>> ARewriteSystemExpression)
-    <|> attempt (aplanIdentifier .>> ws .>>
-        str "(" .>> ws .>>. algebraicExpressionList .>> ws .>> str ")"
-        |>> APrefixExpression)
-    <|> attempt (aplanIdentifier .>> ws .>>
-        str "[" .>> ws .>>. algebraicExpression .>> ws .>> str "]"
-        |>> AArrayIndexingExpression)
-    <|> primaryExpression
+    // attempt rewriteExpression
+    // <|>
+    attempt (
+        aplanIdentifier .>> ws .>> str "(" .>> ws .>>. (algebraicExpressionList)
+        .>> ws
+        .>> str ")"
+        |>> APrefixExpression
+        <!> "prefix () expression"
+    )
+    <|> attempt (
+        aplanIdentifier .>> ws .>> str "[" .>> ws .>>. algebraicExpression
+        .>> ws
+        .>> str "]"
+        |>> AArrayIndexingExpression
+        <!> "prefix [] expression"
+    )
+    <|> (primaryExpression <!> "prefix trivial")
 
 let private application =
-    attempt (tuple2
-        (prefixExpression .>> ws)
-        (algebraicExpression .>> ws)
-        |>> AApplicationExpression)
-    <|> prefixExpression
+    attempt (
+        tuple2 (prefixExpression .>> ws <!> "application base") (algebraicExpression <!> "application argument")
+        |>> AApplicationExpression
+    )
+    <|> (prefixExpression <!> "application trivial")
 
 let private infixExpression =
     tuple3
-        (application .>> spaces)
-        (infixNotation .>> spaces)
-        (algebraicExpression .>> spaces)
-        |>> AInfixExpression
+        (application .>> ws <!> "infix application")
+        (infixNotation .>> ws)
+        (algebraicExpression <!> "infix application right")
+    |>> AInfixExpression
 
-let private infixOperator op priority    =
-    InfixOperator(op, spaces,
-        priority, Associativity.Right,
-        fun left right -> AInfixExpression(left, op, right))
+let private infixOperator op priority =
+    InfixOperator(op, spaces, priority, Associativity.Left, fun left right -> AInfixExpression(left, op, right))
 
-let private prefixOperator op priority    =
-    PrefixOperator(op, spaces,
-        priority, false,
-        fun right -> APrefixExpression(op, [right]))
+let private prefixOperator op priority =
+    PrefixOperator(op, spaces, priority, false, fun right -> APrefixExpression(op, [ right ]))
 
-let private opp = new OperatorPrecedenceParser<AlgebraicExpression,unit,unit>()
-opp.TermParser <- application .>> spaces
+let private opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
+opp.TermParser <- application .>> ws <!> "infix term"
 
 let setBinaryMark name priority symbol =
-    opp.RemoveInfixOperator(symbol) |> ignore
-    opp.AddOperator(infixOperator symbol priority)
+    if symbol <> ";" then
+        opp.RemoveInfixOperator(symbol) |> ignore
+        opp.AddOperator(infixOperator symbol priority)
+
 let setUnaryMark name priority symbol =
     opp.RemovePrefixOperator(symbol) |> ignore
     opp.AddOperator(prefixOperator symbol priority)
 
 //algebraicExpressionRef := choice [ attempt infixExpression; application ]
-algebraicExpressionRef := choice [ opp.ExpressionParser ]
+//algebraicExpressionRef := choice [ opp.ExpressionParser ]
+algebraicExpressionRef := choice [ rewriteExpression; opp.ExpressionParser ]
+
+let assignmentStatement =
+    tuple3
+        (aplanIdentifier .>> ws <!> "assignment identifier")
+        (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws <!> "assignment index")
+        (str ":=" >>. ws >>. (algebraicExpression) .>> ws .>> str ";"
+         <!> "assignment expression")
+    |>> SAssignment
 
 let statement =
-    ws >>.
-        opt (choice [
-            markDescription .>> spaces .>> str ";" |>> SMarkDescription
-            namesDeclaration .>> spaces .>> str ";"
-            atomsDeclaration .>> spaces .>> str ";"
-            str "INCLUDE" >>. ws >>. anglePath |>> SInclude
-            tuple3
-                (aplanIdentifier .>> ws)
-                (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws)
-                (str ":=" >>. ws >>. algebraicExpression .>> ws .>> str ";")
-                |>> SAssignment
-            //algebraicExpression .>> spaces .>> str ";" |>> SExpression
-            str ";" |>> fun (_) -> SEmpty
-            //spaces |>> fun () -> SEmpty
-        ])
-    |>> Option.defaultValue SEmpty
+    ws
+    >>. choice
+            [ markDescription .>> spaces .>> str ";" |>> SMarkDescription
+              namesDeclaration .>> ws .>> str ";"
+              atomsDeclaration .>> spaces .>> str ";"
+              str "INCLUDE" >>. ws >>. anglePath |>> SInclude
+              assignmentStatement
+              str ";" |>> fun (_) -> SEmpty
+              ws1 |>> fun (_) -> SEmpty ]
 
-let program = sepBy statement (ws >>. pstring ";" .>> ws)
+let program interpret =
+    many (
+        statement
+        |>> (fun stmt ->
+            interpret stmt
+            stmt)
+    )
+// (fun stream ->
+//     let reply1 = statement stream
+//     if reply1.Status = Ok then
+//         interpret reply1.Result
+//         let p2 = reply1.Result
+//         let stateTag = stream.StateTag
+//         let mutable reply2 = (preturn p2) stream
+//         if stateTag = stream.StateTag then
+//             reply2.Error <- mergeErrors reply1.Error reply2.Error
+//         reply2
+//     else
+//         Reply(reply1.Status, reply1.Error))

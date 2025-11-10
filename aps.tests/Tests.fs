@@ -8,8 +8,7 @@ open FParsec
 
 let runParser p str =
     match run p str with
-    | Success(result, _, position) when position.Index = str.Length ->
-        result
+    | Success(result, _, position) when position.Index = str.Length -> result
     | Success(result, _, position) when position.Index <> str.Length ->
         Assert.Fail(sprintf "Partial Success: %A, unconsumed input: %s" result (str.Substring(int32 position.Index)))
         raise (new UnreachableException())
@@ -22,58 +21,65 @@ let runParser p str =
 let ``Trivial expressions`` () =
     Assert.Equal(AInt64 1L, runParser int64Number "1")
     Assert.Equal(AFloat 1.25, runParser floatNumber "1.25")
+    Assert.Equal(AAtom "x", runParser algebraicExpression "x")
 
 [<Fact>]
 let ``Names declaration`` () =
-    Assert.Equal(
-        SNamesDeclaration [("S", None)],
-        runParser namesDeclaration "NAMES S")
-    Assert.Equal(
-        SNamesDeclaration [("S", None)],
-        runParser namesDeclaration "NAME S")
-    Assert.Equal(
-        SNamesDeclaration [("arr", Some 4)],
-        runParser namesDeclaration "NAME arr[4]")
-    Assert.Equal(
-        SNamesDeclaration [("S1", None);("S2", None)],
-        runParser namesDeclaration "NAME S1,S2")
-    Assert.Equal(
-        SNamesDeclaration [("S1", None);("S2", None)],
-        runParser namesDeclaration "NAME S1, S2")
+    Assert.Equal(SNamesDeclaration [ ("S", None) ], runParser namesDeclaration "NAMES S")
+    Assert.Equal(SNamesDeclaration [ ("S", None) ], runParser namesDeclaration "NAME S")
+    Assert.Equal(SNamesDeclaration [ ("arr", Some 4) ], runParser namesDeclaration "NAME arr[4]")
+    Assert.Equal(SNamesDeclaration [ ("S1", None); ("S2", None) ], runParser namesDeclaration "NAME S1,S2")
+    Assert.Equal(SNamesDeclaration [ ("S1", None); ("S2", None) ], runParser namesDeclaration "NAME S1, S2")
+// Assert.Equal(
+//     [SNamesDeclaration [("S1", None);("S2", None)]],
+//     runParser (program ignore) "  /**/\n\n\n\n NAME S1, S2;")
 
 [<Fact>]
 let ``Mark description`` () =
     Assert.Equal(
-        MarkDescription [
-            GenericMark ("X", KnownArity 3u)
-            GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")
-            UnaryMark ("~", 1u, 20u)],
-        runParser markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\"), ~(1, 20)")
+        MarkDescription
+            [ GenericMark("X", KnownArity 3u)
+              GenericMark("X", UndefinedArity)
+              BinaryMark("comma", 2u, 7u, ",")
+              UnaryMark("~", 1u, 20u) ],
+        runParser markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\"), ~(1, 20)"
+    )
+
     Assert.Equal(
-        MarkDescription [
-            GenericMark ("X", KnownArity 3u)
-            GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")],
-        runParser markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")")
+        MarkDescription
+            [ GenericMark("X", KnownArity 3u)
+              GenericMark("X", UndefinedArity)
+              BinaryMark("comma", 2u, 7u, ",") ],
+        runParser markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")"
+    )
+
     Assert.Equal(
-        MarkDescription [
-            GenericMark ("X", KnownArity 3u)
-            GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")],
-        runParser markDescription "MARK /*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
+        MarkDescription
+            [ GenericMark("X", KnownArity 3u)
+              GenericMark("X", UndefinedArity)
+              BinaryMark("comma", 2u, 7u, ",") ],
+        runParser markDescription "MARK /*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
+    )
+
     Assert.Equal(
-        MarkDescription [
-            GenericMark ("X", KnownArity 3u)
-            GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")],
-        runParser markDescription "MARK\n/*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
+        MarkDescription
+            [ GenericMark("X", KnownArity 3u)
+              GenericMark("X", UndefinedArity)
+              BinaryMark("comma", 2u, 7u, ",") ],
+        runParser markDescription "MARK\n/*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
+    )
+
     Assert.Equal(
-        MarkDescription [
-            GenericMark ("X", KnownArity 3u)
-            GenericMark ("X", UndefinedArity)
-            BinaryMark ("comma", 2u, 7u, ",")],
-        runParser markDescription "MARK\n/*some comment*/ /*othercomment*/ X(3), X(UNDEF), comma( 2,  7, \",\")")
+        MarkDescription
+            [ GenericMark("X", KnownArity 3u)
+              GenericMark("X", UndefinedArity)
+              BinaryMark("comma", 2u, 7u, ",") ],
+        runParser markDescription "MARK\n/*some comment*/ /*othercomment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
+    )
+
+    setBinaryMark "COMMA" 7 ","
+    setBinaryMark "SEM" 5 ";"
+    setBinaryMark "EQU" 11 "="
 
 [<Fact>]
 let ``Primitive expression`` () =
@@ -90,94 +96,88 @@ let ``Primitive expression`` () =
 
 [<Fact>]
 let ``Prefix expression`` () =
-    Assert.Equal(
-        APrefixExpression ("F", [AInt64 2L]),
-        runParser algebraicExpression "F(2)")
-    Assert.Equal(
-        APrefixExpression ("F", [AInt64 2L]),
-        runParser algebraicExpression "F( 2)")
-    Assert.Equal(
-        APrefixExpression ("F", [AInt64 2L]),
-        runParser algebraicExpression "F( 2 )")
-    Assert.Equal(
-        AArrayIndexingExpression ("a", AInt64 5L),
-        runParser algebraicExpression "a[5]")
+    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser algebraicExpression "F(2)")
+    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser algebraicExpression "F( 2)")
+    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser algebraicExpression "F( 2 )")
+    Assert.Equal(AArrayIndexingExpression("a", AInt64 5L), runParser algebraicExpression "a[5]")
 
 [<Fact>]
 let ``Infix expression`` () =
     setBinaryMark "ADD" 54 "+"
     setBinaryMark "MUL" 58 "*"
 
+    Assert.Equal(AInfixExpression(AAtom "x", "+", AAtom "y"), runParser algebraicExpression "x + y")
+    Assert.Equal(AInfixExpression(AAtom "x", "+", AAtom "y"), runParser algebraicExpression "x +  y")
+    Assert.Equal(AInfixExpression(AAtom "x", "+", AAtom "y"), runParser algebraicExpression "(x + y)")
+
     Assert.Equal(
-        AInfixExpression (AAtom "x", "+", AAtom "y"),
-        runParser algebraicExpression "x + y")
+        AInfixExpression(AInfixExpression(AAtom "x", "+", AAtom "y"), "*", AAtom "z"),
+        runParser algebraicExpression "(x + y) * z"
+    )
+
     Assert.Equal(
-        AInfixExpression (AAtom "x", "+", AAtom "y"),
-        runParser algebraicExpression "x +  y")
-    Assert.Equal(
-        AInfixExpression (AAtom "x", "+", AAtom "y"),
-        runParser algebraicExpression "(x + y)")
-    Assert.Equal(
-        AInfixExpression
-            (AInfixExpression (AAtom "x", "+", AAtom "y"), "*",
-            AAtom "z"),
-        runParser algebraicExpression "(x + y) * z")
-    Assert.Equal(
-        AInfixExpression
-            (AInfixExpression
-                (AInfixExpression (AAtom "x", "+", AAtom "y"),
-                "*",
-                AAtom "z"),
-            "+",
-            AAtom "w"),
-        runParser algebraicExpression "(x + y) * z + w")
+        AInfixExpression(AInfixExpression(AInfixExpression(AAtom "x", "+", AAtom "y"), "*", AAtom "z"), "+", AAtom "w"),
+        runParser algebraicExpression "(x + y) * z + w"
+    )
 
 [<Fact>]
 let ``Asignment`` () =
-    Assert.Equal(
-        SAssignment("b", None, AInt64 11L),
-        runParser statement "b := 11;")
-    Assert.Equal(
-        SAssignment("a", Some 5, AInt64 10L),
-        runParser statement "a[5] := 10;")
+    Assert.Equal(SAssignment("b", None, AInt64 11L), runParser statement "b := 11;")
+    Assert.Equal(SAssignment("a", Some 5, AInt64 10L), runParser statement "a[5] := 10;")
 
 [<Fact>]
 let ``Application expression`` () =
     Assert.Equal(
-        AApplicationExpression
-            (APrefixExpression ("proc", []),
-            APrefixExpression ("loc", [AAtom "Term"])),
-        runParser algebraicExpression "proc()loc(Term)")
+        AApplicationExpression(APrefixExpression("proc", []), APrefixExpression("loc", [ AAtom "Term" ])),
+        runParser algebraicExpression "proc()loc(Term)"
+    )
+
+    Assert.Equal(
+        AApplicationExpression(
+            APrefixExpression("proc", []),
+            AApplicationExpression(APrefixExpression("loc", [ AAtom "Term" ]), AEmpty)
+        ),
+        runParser algebraicExpression "proc()loc(Term)()"
+    )
+
+    Assert.Equal(
+        AApplicationExpression(
+            APrefixExpression("proc", []),
+            AApplicationExpression(APrefixExpression("loc", [ AAtom "Term" ]), AAtom "x")
+        ),
+        runParser algebraicExpression "proc()loc(Term)x"
+    )
+
+    Assert.Equal(
+        AApplicationExpression(APrefixExpression("test", []), AAtom "x"),
+        runParser algebraicExpression "test()x"
+    )
+
+    Assert.Equal(AApplicationExpression(AAtom "a", AAtom "x"), runParser algebraicExpression "a x")
 
 
 [<Fact>]
 let ``Rewrite system`` () =
     setBinaryMark "MR" 58 ">" // More (strange names in hindsight)
+    setBinaryMark "SEM" 5 ";"
+
+    Assert.Equal(ARewriteSystemExpression([], AAtom "x"), runParser algebraicExpression "rs()x")
+    Assert.Equal(SAssignment("R", None, ARewriteSystemExpression([], AAtom "x")), runParser statement "R:=rs()x;")
+    Assert.Equal(SAssignment("R", None, ARewriteSystemExpression([], AAtom "x")), runParser statement "R:=rs()\nx;")
+    Assert.Equal(SAssignment("R", None, ARewriteSystemExpression([], AAtom "x")), runParser statement "R:=rs()(\nx);")
 
     Assert.Equal(
-        ARewriteSystemExpression ([], AAtom "x"),
-        runParser algebraicExpression "rs()x")
-    Assert.Equal(
-        ARewriteSystemExpression ([], AAtom "x"),
-        runParser algebraicExpression "rs()\nx")
-    Assert.Equal(
-        SAssignment ("R", None,
-            ARewriteSystemExpression ([], AAtom "x")),
-        runParser statement "R:=rs()(\nx);")
-    Assert.Equal(
-        SAssignment
-            ("R", None,
-             ARewriteSystemExpression ([], AInfixExpression (AAtom "x", ">", AAtom "x"))),
-        runParser statement "R:=rs()((x>x));")
+        SAssignment("R", None, ARewriteSystemExpression([], AInfixExpression(AAtom "x", ">", AAtom "x"))),
+        runParser statement "R:=rs()((x>x));"
+    )
+
+    setBinaryMark "COMMA" 7 ","
+    setBinaryMark "EQU" 11 "="
 
 [<Fact>]
 let ``Atom description`` () =
-    Assert.Equal(
-        SAtomDeclaration ["?"; "@"; "#"],
-        runParser statement "ATOMS ?,  @, /* {,  }, */ #;")
+    Assert.Equal(SAtomDeclaration [ "?"; "@"; "#" ], runParser statement "ATOMS ?,  @, /* {,  }, */ #;")
 
 [<Fact>]
 let ``Include statements`` () =
-    Assert.Equal(
-        SInclude "test.ap",
-        runParser statement "INCLUDE <test.ap>")
+    Assert.Equal(SInclude "test.ap", runParser statement "INCLUDE <test.ap>")
