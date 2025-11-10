@@ -88,7 +88,7 @@ let ``Primitive expression`` () =
     Assert.Equal(AFloat 2.3, runParser algebraicExpression "2.3")
     Assert.Equal(AEmpty, runParser algebraicExpression "()")
     Assert.Equal(AString "some string", runParser algebraicExpression "\"some string\"")
-    //Assert.Equal(AVal "z", runParser algebraicExpression "VAL z")
+    Assert.Equal(AVal "z", runParser algebraicExpression "VAL z")
     Assert.Equal(AAtom "x", runParser algebraicExpression "(x)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "(2)")
     Assert.Equal(AInt64 2L, runParser algebraicExpression "((2))")
@@ -128,24 +128,24 @@ let ``Asignment`` () =
 [<Fact>]
 let ``Application expression`` () =
     Assert.Equal(
-        AApplicationExpression(APrefixExpression("proc", []), APrefixExpression("loc", [ AAtom "Term" ])),
-        runParser algebraicExpression "proc()loc(Term)"
+        AApplicationExpression(APrefixExpression("test", []), APrefixExpression("loc1", [ AAtom "Term" ])),
+        runParser algebraicExpression "test()loc1(Term)"
     )
 
     Assert.Equal(
         AApplicationExpression(
-            APrefixExpression("proc", []),
-            AApplicationExpression(APrefixExpression("loc", [ AAtom "Term" ]), AEmpty)
+            APrefixExpression("test", []),
+            AApplicationExpression(APrefixExpression("loc1", [ AAtom "Term" ]), AEmpty)
         ),
-        runParser algebraicExpression "proc()loc(Term)()"
+        runParser algebraicExpression "test()loc1(Term)()"
     )
 
     Assert.Equal(
         AApplicationExpression(
-            APrefixExpression("proc", []),
-            AApplicationExpression(APrefixExpression("loc", [ AAtom "Term" ]), AAtom "x")
+            APrefixExpression("test", []),
+            AApplicationExpression(APrefixExpression("loc1", [ AAtom "Term" ]), AAtom "x")
         ),
-        runParser algebraicExpression "proc()loc(Term)x"
+        runParser algebraicExpression "test()loc1(Term)x"
     )
 
     Assert.Equal(
@@ -181,3 +181,105 @@ let ``Atom description`` () =
 [<Fact>]
 let ``Include statements`` () =
     Assert.Equal(SInclude "test.ap", runParser statement "INCLUDE <test.ap>")
+
+[<Fact>]
+let ``Proc definition statements`` () =
+    setBinaryMark "SET" 20 "-->"
+    setBinaryMark "COMMA" 7 ","
+    setBinaryMark "SEM" 5
+
+    Assert.Equal(
+        SAssignment(
+            "p",
+            None,
+            AProcExpression(
+                [ AAtom "x" ],
+                Some [ AAtom "y" ],
+                [ AInfixExpression(
+                      AInfixExpression(
+                          AInfixExpression(
+                              AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
+                              ",",
+                              APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                          ),
+                          ",",
+                          APrefixExpression(
+                              "can_ord",
+                              [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
+                          )
+                      ),
+                      ",",
+                      APrefixExpression("return", [ AAtom "x" ])
+                  ) ]
+            )
+        ),
+        runParser
+            statement
+            """p:=proc(x)loc(y)(
+      x-->copy(x),
+      ntb(x,R),
+      can_ord(x,R1,Q1),
+      return(x)
+    );"""
+    )
+
+    Assert.Equal(
+        SAssignment(
+            "p",
+            None,
+            AProcExpression(
+                [ AAtom "x" ],
+                None,
+                [ AInfixExpression(
+                      AInfixExpression(
+                          AInfixExpression(
+                              AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
+                              ",",
+                              APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                          ),
+                          ",",
+                          APrefixExpression(
+                              "can_ord",
+                              [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
+                          )
+                      ),
+                      ",",
+                      APrefixExpression("return", [ AAtom "x" ])
+                  ) ]
+            )
+        ),
+        runParser
+            statement
+            """p:=proc(x)(
+      x-->copy(x),
+      ntb(x,R),
+      can_ord(x,R1,Q1),
+      return(x)
+    );"""
+    )
+
+    Assert.Equal(
+        SAssignment(
+            "p",
+            None,
+            AProcExpression(
+                [ AAtom "x" ],
+                None,
+                [ AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ]))
+                  APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                  APrefixExpression(
+                      "can_ord",
+                      [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
+                  )
+                  APrefixExpression("return", [ AAtom "x" ]) ]
+            )
+        ),
+        runParser
+            statement
+            """p:=proc(x)(
+      x-->copy(x);
+      ntb(x,R);
+      can_ord(x,R1,Q1);
+      return(x)
+    );"""
+    )

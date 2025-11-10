@@ -17,6 +17,7 @@ type AlgebraicExpression =
     | AInfixExpression of AlgebraicExpression * string * AlgebraicExpression
     | AApplicationExpression of AlgebraicExpression * AlgebraicExpression
     | AArrayIndexingExpression of string * AlgebraicExpression
+    | AProcExpression of AlgebraicExpression list * (AlgebraicExpression list option) * AlgebraicExpression list
 
 type MarkArity =
     | KnownArity of uint32
@@ -184,19 +185,31 @@ let markDescription =
 let algebraicExpression, algebraicExpressionRef =
     createParserForwardedToRef<AlgebraicExpression, unit> ()
 
+let algebraicList =
+    //algebraicExpressionListSemicolon
+    let rec preprocess xs = 
+        match xs with
+        | [ x ] -> x
+        | head :: tail -> AInfixExpression( head, ";", preprocess tail )
+        | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
+    sepBy1 algebraicExpression (ws >>. pstring ";" .>> ws) |>> preprocess
+
 let private primaryExpression =
     attempt (int64Number .>> notFollowedBy (pchar '.'))
     <|> (floatNumber)
     <|> (quotedString |>> AString)
+    <|> attempt (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
     <|> (aplanIdentifier |>> AAtom <!> "atom primary expression")
-    <|> (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
     <|> (attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
          <!> "empty primary expression")
-    <|> ((str "(" >>. ws >>. algebraicExpression .>> ws .>> str ")")
+    <|> ((str "(" >>. ws >>. algebraicList .>> ws .>> str ")")
          <!> "nested primary expression")
 
 let private algebraicExpressionList =
     sepBy algebraicExpression (ws >>. pstring "," .>> ws)
+
+let private algebraicExpressionListSemicolon =
+    sepBy algebraicExpression (ws >>. pstring ";" .>> ws)
 
 let rewriteExpression =
     tuple2
@@ -208,6 +221,22 @@ let rewriteExpression =
         algebraicExpression
     <!> "rewrite body"
     |>> ARewriteSystemExpression
+
+let procExpression =
+    tuple3
+        (pstring "proc" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
+         .>> ws
+         .>> str ")"
+         .>> ws
+         <!> "proc parameters")
+        (opt (
+            str "loc(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws
+            <!> "proc local parameters"
+        ))
+        (str "(" .>> ws >>. algebraicExpressionListSemicolon .>> ws .>> str ")"
+         <!> "proc local statements")
+    <!> "proc body"
+    |>> AProcExpression
 
 let private prefixExpression =
     // attempt rewriteExpression
@@ -234,6 +263,12 @@ let private application =
         |>> AApplicationExpression
     )
     <|> (prefixExpression <!> "application trivial")
+    // let rec preprocess xs = 
+    //     match xs with
+    //     | [ x ] -> x
+    //     | head :: tail -> AApplicationExpression( head, preprocess tail )
+    //     | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
+    // sepBy1 prefixExpression ws |>> preprocess
 
 let private infixExpression =
     tuple3
@@ -249,10 +284,10 @@ let private prefixOperator op priority =
     PrefixOperator(op, spaces, priority, false, fun right -> APrefixExpression(op, [ right ]))
 
 let private opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
-opp.TermParser <- application .>> ws <!> "infix term"
+opp.TermParser <- ws >>. application .>> ws <!> "infix term"
 
 let setBinaryMark name priority symbol =
-    if symbol <> ";" then
+    if symbol <> ";" || false then
         opp.RemoveInfixOperator(symbol) |> ignore
         opp.AddOperator(infixOperator symbol priority)
 
@@ -262,7 +297,8 @@ let setUnaryMark name priority symbol =
 
 //algebraicExpressionRef := choice [ attempt infixExpression; application ]
 //algebraicExpressionRef := choice [ opp.ExpressionParser ]
-algebraicExpressionRef := choice [ rewriteExpression; opp.ExpressionParser ]
+algebraicExpressionRef
+:= choice [ rewriteExpression; procExpression; opp.ExpressionParser ]
 
 let assignmentStatement =
     tuple3

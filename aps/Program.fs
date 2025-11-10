@@ -112,16 +112,9 @@ and interpretProgram context str =
     match run (program statementInterpreter) str with
     | Success(result, _, position) when position.Index = str.Length -> ()
     | Success(result, _, position) when position.Index <> str.Length ->
-        printfn
-            ">>> Partial Success: %A, position: %A, index = %d, initialPosition = %d"
-            result
-            position
-            position.Index
-            initialPosition
-    | Failure(errorMsg, _, _) ->
-        printfn "Failure: %s" errorMsg
-    | failure ->
-        printfn "Generic Failure: %A" failure
+        printfn ">>> Partial Success: %A, position: %A, index = %d" result position position.Index
+    | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
+    | failure -> printfn "Generic Failure: %A" failure
 
 [<EntryPoint>]
 let main (args) =
