@@ -136,42 +136,24 @@ let rec interpret context env statement =
         env
 
 and interpretProgram context str =
-    let mutable initialPosition = 0
-    let mutable haveToExit = false
     let str = str + ";"
 
-    //while (not haveToExit) do
-    //match runParserOnSubstring statement () context.source str initialPosition (str.Length - initialPosition) with
     let statementInterpreter statement =
         interpret context globalEnv statement |> ignore
 
     match run (program statementInterpreter) str with
-    //match run (program (fun x -> ())) str with
-    | Success(result, _, position) when position.Index = str.Length -> haveToExit <- true
+    | Success(result, _, position) when position.Index = str.Length -> ()
     | Success(result, _, position) when position.Index <> str.Length ->
-        //printfn "Initial: %d current %d - %A" initialPosition position.Index result
-        if (int position.Index <= 0) then
-            // if result <> SEmpty then
-            //     printfn "Don't parse whole file: %A" result
-
-            haveToExit <- true
-
-        initialPosition <- initialPosition + int position.Index
-
         printfn
             ">>> Partial Success: %A, position: %A, index = %d, initialPosition = %d"
             result
             position
             position.Index
             initialPosition
-    //globalEnv <- interpret context globalEnv result
-    //printfn "%A" globalEnv
     | Failure(errorMsg, _, _) ->
         printfn "Failure: %s" errorMsg
-        haveToExit <- true
     | failure ->
         printfn "Generic Failure: %A" failure
-        haveToExit <- true
 
 // test floatBetweenBrackets "[1.25]"
 // test arity "4"
