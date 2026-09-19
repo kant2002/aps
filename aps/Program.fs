@@ -13,6 +13,7 @@ type AlgebraicValue =
 
 type ApsEnvironment = { names: Map<string, AlgebraicValue> }
 
+let trace_statements = false
 
 let mutable globalEnv =
     {
@@ -51,7 +52,8 @@ let resolveIncludePath (sourceContext: SourceContext) (path: string) =
 let rec interpret context env statement =
     match statement with
     | SNamesDeclaration declarations ->
-        //printfn "Declarations: %A" declarations
+        if trace_statements then
+            printfn "Declarations: %A" declarations
         let mutable names = env.names
 
         for (decl, arity) in declarations do
@@ -63,7 +65,8 @@ let rec interpret context env statement =
     | SAssignment(ident, index, expr) ->
         match env.names |> Map.tryFind ident with
         | Some value ->
-            //printfn "Assign: %s = %A" ident expr
+            if trace_statements then
+                printfn "Assign: %s = %A" ident expr
             match index with
             | Some index -> raise (NotImplementedException("not implemented"))
             | None ->
@@ -76,10 +79,12 @@ let rec interpret context env statement =
             printfn "Identifier %s not found" ident
             env
     | SAtomDeclaration atoms ->
-        printfn "Atoms: %A" atoms
+        if trace_statements then
+            printfn "Atoms: %A" atoms
         env
     | SExpression expr ->
-        printfn "Expression: %A" expr
+        if trace_statements then
+            printfn "Expression: %A" expr
         env
     | SMarkDescription marks ->
         match marks with
@@ -111,7 +116,7 @@ and interpretProgram context str =
     let str = str + ";"
 
     let statementInterpreter statement =
-        interpret context globalEnv statement |> ignore
+        globalEnv <- interpret context globalEnv statement
 
     match run (program statementInterpreter) str with
     | Success(result, _, position) when position.Index = str.Length -> ()
