@@ -1,6 +1,4 @@
 NAME task;
-NAME proglist;
-proglist:=prn;
 
 task:=(
     prn("======================================= ");
