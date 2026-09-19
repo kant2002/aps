@@ -14,7 +14,10 @@ type AlgebraicValue =
 type ApsEnvironment = { names: Map<string, AlgebraicValue> }
 
 
-let mutable globalEnv = { names = new Map<string, AlgebraicValue>([]) }
+let mutable globalEnv =
+    {
+        names = new Map<string, AlgebraicValue>([])
+    }
 
 let evaluateExpression env aExpr =
     match aExpr with
@@ -67,7 +70,8 @@ let rec interpret context env statement =
                 let evaluatedValue = evaluateExpression env expr
 
                 { env with
-                    names = env.names |> Map.add ident evaluatedValue }
+                    names = env.names |> Map.add ident evaluatedValue
+                }
         | None ->
             printfn "Identifier %s not found" ident
             env

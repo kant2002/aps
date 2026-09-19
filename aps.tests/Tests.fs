@@ -38,42 +38,52 @@ let ``Names declaration`` () =
 let ``Mark description`` () =
     Assert.Equal(
         MarkDescription
-            [ GenericMark("X", KnownArity 3u)
-              GenericMark("X", UndefinedArity)
-              BinaryMark("comma", 2u, 7u, ",")
-              UnaryMark("~", 1u, 20u) ],
+            [
+                GenericMark("X", KnownArity 3u)
+                GenericMark("X", UndefinedArity)
+                BinaryMark("comma", 2u, 7u, ",")
+                UnaryMark("~", 1u, 20u)
+            ],
         runParser markDescription "MARK X(3), X(UNDEF), comma( 2,  7, \",\"), ~(1, 20)"
     )
 
     Assert.Equal(
         MarkDescription
-            [ GenericMark("X", KnownArity 3u)
-              GenericMark("X", UndefinedArity)
-              BinaryMark("comma", 2u, 7u, ",") ],
+            [
+                GenericMark("X", KnownArity 3u)
+                GenericMark("X", UndefinedArity)
+                BinaryMark("comma", 2u, 7u, ",")
+            ],
         runParser markDescription "MARK X(3), /*some comment*/ X(UNDEF), comma( 2,  7, \",\")"
     )
 
     Assert.Equal(
         MarkDescription
-            [ GenericMark("X", KnownArity 3u)
-              GenericMark("X", UndefinedArity)
-              BinaryMark("comma", 2u, 7u, ",") ],
+            [
+                GenericMark("X", KnownArity 3u)
+                GenericMark("X", UndefinedArity)
+                BinaryMark("comma", 2u, 7u, ",")
+            ],
         runParser markDescription "MARK /*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
     )
 
     Assert.Equal(
         MarkDescription
-            [ GenericMark("X", KnownArity 3u)
-              GenericMark("X", UndefinedArity)
-              BinaryMark("comma", 2u, 7u, ",") ],
+            [
+                GenericMark("X", KnownArity 3u)
+                GenericMark("X", UndefinedArity)
+                BinaryMark("comma", 2u, 7u, ",")
+            ],
         runParser markDescription "MARK\n/*some comment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
     )
 
     Assert.Equal(
         MarkDescription
-            [ GenericMark("X", KnownArity 3u)
-              GenericMark("X", UndefinedArity)
-              BinaryMark("comma", 2u, 7u, ",") ],
+            [
+                GenericMark("X", KnownArity 3u)
+                GenericMark("X", UndefinedArity)
+                BinaryMark("comma", 2u, 7u, ",")
+            ],
         runParser markDescription "MARK\n/*some comment*/ /*othercomment*/ X(3), X(UNDEF), comma( 2,  7, \",\")"
     )
 
@@ -195,22 +205,26 @@ let ``Proc definition statements`` () =
             AProcExpression(
                 [ AAtom "x" ],
                 Some [ AAtom "y" ],
-                [ AInfixExpression(
-                      AInfixExpression(
-                          AInfixExpression(
-                              AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
-                              ",",
-                              APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                          ),
-                          ",",
-                          APrefixExpression(
-                              "can_ord",
-                              [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
-                          )
-                      ),
-                      ",",
-                      APrefixExpression("return", [ AAtom "x" ])
-                  ) ]
+                [
+                    AInfixExpression(
+                        AInfixExpression(
+                            AInfixExpression(
+                                AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
+                                ",",
+                                APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                            ),
+                            ",",
+                            APrefixExpression(
+                                "can_ord",
+                                [
+                                    AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
+                                ]
+                            )
+                        ),
+                        ",",
+                        APrefixExpression("return", [ AAtom "x" ])
+                    )
+                ]
             )
         ),
         runParser
@@ -230,22 +244,26 @@ let ``Proc definition statements`` () =
             AProcExpression(
                 [ AAtom "x" ],
                 None,
-                [ AInfixExpression(
-                      AInfixExpression(
-                          AInfixExpression(
-                              AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
-                              ",",
-                              APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                          ),
-                          ",",
-                          APrefixExpression(
-                              "can_ord",
-                              [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
-                          )
-                      ),
-                      ",",
-                      APrefixExpression("return", [ AAtom "x" ])
-                  ) ]
+                [
+                    AInfixExpression(
+                        AInfixExpression(
+                            AInfixExpression(
+                                AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
+                                ",",
+                                APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                            ),
+                            ",",
+                            APrefixExpression(
+                                "can_ord",
+                                [
+                                    AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
+                                ]
+                            )
+                        ),
+                        ",",
+                        APrefixExpression("return", [ AAtom "x" ])
+                    )
+                ]
             )
         ),
         runParser
@@ -265,13 +283,17 @@ let ``Proc definition statements`` () =
             AProcExpression(
                 [ AAtom "x" ],
                 None,
-                [ AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ]))
-                  APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                  APrefixExpression(
-                      "can_ord",
-                      [ AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1") ]
-                  )
-                  APrefixExpression("return", [ AAtom "x" ]) ]
+                [
+                    AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ]))
+                    APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
+                    APrefixExpression(
+                        "can_ord",
+                        [
+                            AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
+                        ]
+                    )
+                    APrefixExpression("return", [ AAtom "x" ])
+                ]
             )
         ),
         runParser

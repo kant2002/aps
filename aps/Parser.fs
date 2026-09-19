@@ -183,15 +183,16 @@ let markDescription =
 
 // Expressions
 let algebraicExpression, algebraicExpressionRef =
-    createParserForwardedToRef<AlgebraicExpression, unit> ()
+    createParserForwardedToRef<AlgebraicExpression, unit>()
 
 let algebraicList =
     //algebraicExpressionListSemicolon
-    let rec preprocess xs = 
+    let rec preprocess xs =
         match xs with
         | [ x ] -> x
-        | head :: tail -> AInfixExpression( head, ";", preprocess tail )
+        | head :: tail -> AInfixExpression(head, ";", preprocess tail)
         | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
+
     sepBy1 algebraicExpression (ws >>. pstring ";" .>> ws) |>> preprocess
 
 let private primaryExpression =
@@ -263,7 +264,7 @@ let private application =
         |>> AApplicationExpression
     )
     <|> (prefixExpression <!> "application trivial")
-    // let rec preprocess xs = 
+    // let rec preprocess xs =
     //     match xs with
     //     | [ x ] -> x
     //     | head :: tail -> AApplicationExpression( head, preprocess tail )
@@ -311,13 +312,15 @@ let assignmentStatement =
 let statement =
     ws
     >>. choice
-            [ markDescription .>> spaces .>> str ";" |>> SMarkDescription
-              namesDeclaration .>> ws .>> str ";"
-              atomsDeclaration .>> spaces .>> str ";"
-              str "INCLUDE" >>. ws >>. anglePath |>> SInclude
-              assignmentStatement
-              str ";" |>> fun (_) -> SEmpty
-              ws1 |>> fun (_) -> SEmpty ]
+            [
+                markDescription .>> spaces .>> str ";" |>> SMarkDescription
+                namesDeclaration .>> ws .>> str ";"
+                atomsDeclaration .>> spaces .>> str ";"
+                str "INCLUDE" >>. ws >>. anglePath |>> SInclude
+                assignmentStatement
+                str ";" |>> fun (_) -> SEmpty
+                ws1 |>> fun (_) -> SEmpty
+            ]
 
 let program interpret =
     many (
