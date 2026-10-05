@@ -45,3 +45,19 @@ Array access not described seems to be. Have to look.
 - https://apsystems.org.ua/uploads/doc/aps/APSUM.eng.pdf
 - https://apsystems.org.ua/uploads/doc/aps/APSv3.eng.pdf
 - https://apsystems.org.ua/uploads/doc/aps/APSUM.rus.pdf
+
+# APS CLI reference
+
+```
+-i <include_file> Include file for processing. Maximum 30 files.
+-V print version
+-h print help
+-s <clew_file> Save clew file (temp.clew default)
+-l ??? Some state to load
+-w <some_number> ???
+-c <config_file> ???
+-t <some_file> ???
+-d ??? some switch
+-I ???
+-C <configuration_file> ?? Max size 4096 bytes.
+```
