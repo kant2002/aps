@@ -196,7 +196,7 @@ let ``Include statements`` () =
 let ``Proc definition statements`` () =
     setBinaryMark "SET" 20 "-->"
     setBinaryMark "COMMA" 7 ","
-    setBinaryMark "SEM" 5
+    setBinaryMark "SEM" 5 ";"
 
     Assert.Equal(
         SAssignment(
