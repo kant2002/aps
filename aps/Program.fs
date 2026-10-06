@@ -27,5 +27,5 @@ let main (args) =
         let fileNames = results.GetResults Include_File
         for fileName in fileNames do
             let programCode = File.ReadAllText(fileName)
-            interpretProgram { source = fileName } programCode
+            interpretProgram { source = fileName } (programCode + " \n ; ")
     0

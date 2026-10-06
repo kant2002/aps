@@ -110,6 +110,7 @@ let ``Prefix expression`` () =
     Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser algebraicExpression "F( 2)")
     Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser algebraicExpression "F( 2 )")
     Assert.Equal(AArrayIndexingExpression("a", AInt64 5L), runParser algebraicExpression "a[5]")
+    Assert.Equal(APrefixExpression("a", [ AString "123" ]), runParser algebraicExpression "a(\"123\")")
 
 [<Fact>]
 let ``Infix expression`` () =
@@ -305,3 +306,10 @@ let ``Proc definition statements`` () =
       return(x)
     );"""
     )
+
+[<Fact>]
+let ``Simple task usage`` () =
+    setBinaryMark "COMMA" 7 ","
+    Assert.Equal( SAssignment ("task", None, APrefixExpression("prn", [ AString "======================================= " ])), runParser statement "task:=(
+        prn(\"======================================= \")
+    );")

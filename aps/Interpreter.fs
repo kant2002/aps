@@ -12,20 +12,47 @@ type AlgebraicValue =
     | VArray of AlgebraicValue list
     | VRewriteSystem of string list * AlgebraicExpression
 
-type ApsEnvironment = { names: Map<string, AlgebraicValue> }
+type AExternalFunction = AlgebraicValue -> AlgebraicValue
+
+type ApsEnvironment = { 
+    names: Map<string, AlgebraicValue>
+    externalFunctions: Map<string, AExternalFunction>
+}
 
 let trace_statements = false
+
+let getSingleValue value =
+    match value with
+    | VArray [ singleValue ] -> singleValue
+    | VArray (head::tail) -> head
+    | _ -> value
+
+let formatValue value =
+    match value with
+    | VEmpty -> ""
+    | VInt64 v -> sprintf "%d" v
+    | VFloat v -> sprintf "%f" v
+    | VString v -> sprintf "%s" v // The string is already escaped from the parser. If parser changed, we need to escape it here.
+    | VArray values -> raise (NotImplementedException("Array formatting not implemented"))
+    | VRewriteSystem(vars, rules) -> raise (NotImplementedException("Rewrite system formatting not implemented"))
+
+let prnPrototype : AExternalFunction = 
+    fun v -> 
+        let v = v |> getSingleValue |> formatValue
+        printfn "%A" v
+        VEmpty
 
 let mutable globalEnv =
     {
         names = new Map<string, AlgebraicValue>([])
+        externalFunctions = new Map<string, AExternalFunction>([("prn", prnPrototype)])
     }
 
-let evaluateExpression env aExpr =
+let rec evaluateExpression env aExpr =
     match aExpr with
     | AInt64 value -> VInt64 value
     | AFloat value -> VFloat value
-    | AString value -> VString value
+    | AString value -> VString value  // the string is escaped in AString. If we want unescape it in VString, formatValue should be changed.
     | AEmpty -> VEmpty
     | ARewriteSystemExpression(vars, rules) ->
         let rec collectVars (initState: string list) vars =
@@ -40,6 +67,14 @@ let evaluateExpression env aExpr =
 
         let rewriteSystemVars = collectVars [] (vars |> List.head)
         VRewriteSystem(rewriteSystemVars, rules)
+    | APrefixExpression (name, parameters) -> 
+        match env.externalFunctions |> Map.tryFind name with
+        | Some func ->
+            let evaluatedParams = parameters |> List.map (evaluateExpression env)
+            //func (if evaluatedParams.Length = 1 then evaluatedParams.Head else VArray evaluatedParams)
+            func (VArray evaluatedParams)
+        | None ->
+            raise (NotImplementedException(sprintf "Cannot evaluate prefix expression for %s and parameters %A" name parameters))
     | _ -> raise (NotImplementedException(sprintf "Cannot evaluate %A" aExpr))
 
 type SourceContext = { source: string }
