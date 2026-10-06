@@ -7,13 +7,21 @@
       "commandName": "Project",
       "commandLineArgs": "--help"
     },
-    "prn": {
-      "commandName": "Project",
-      "commandLineArgs": "-i ../../../../samples/print.ap"
-    },
     "name_declaration": {
       "commandName": "Project",
       "commandLineArgs": "-i ../../../../samples/name_declaration.ap"
+    },
+    "print": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/print.ap"
+    },
+    "print_multiple": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/print_multiple.ap"
+    },
+    "print_tuple": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/print_tuple.ap"
     }
   }
 }

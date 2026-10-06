@@ -296,6 +296,10 @@ let setUnaryMark name priority symbol =
     opp.RemovePrefixOperator(symbol) |> ignore
     opp.AddOperator(prefixOperator symbol priority)
 
+let setDefaultMarks() =
+    setBinaryMark "COMMA" 7 ","
+    setBinaryMark "LL" 5 ";"
+
 //algebraicExpressionRef := choice [ attempt infixExpression; application ]
 //algebraicExpressionRef := choice [ opp.ExpressionParser ]
 algebraicExpressionRef
@@ -321,14 +325,6 @@ let statement =
                 str ";" |>> fun (_) -> SEmpty
                 ws1 |>> fun (_) -> SEmpty
             ]
-
-let program interpret =
-    many (
-        statement
-        |>> (fun stmt ->
-            interpret stmt
-            stmt)
-    )
 // (fun stream ->
 //     let reply1 = statement stream
 //     if reply1.Status = Ok then

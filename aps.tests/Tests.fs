@@ -313,3 +313,11 @@ let ``Simple task usage`` () =
     Assert.Equal( SAssignment ("task", None, APrefixExpression("prn", [ AString "======================================= " ])), runParser statement "task:=(
         prn(\"======================================= \")
     );")
+
+[<Fact>]
+let ``Multiple task statements`` () =
+    setBinaryMark "COMMA" 7 ","
+    Assert.Equal( SAssignment ("task", None, AInfixExpression(APrefixExpression("prn", [ AString "======================================= " ]), ",", APrefixExpression("prn", [ AString "======================================= " ]))), runParser statement "task:=(
+        prn(\"======================================= \"), prn(\"======================================= \")
+    );")
+

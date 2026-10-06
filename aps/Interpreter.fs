@@ -85,6 +85,14 @@ let resolveIncludePath (sourceContext: SourceContext) (path: string) =
     else
         Path.Combine(Path.GetDirectoryName(sourceContext.source), path)
 
+let program interpret =
+    many (
+        statement
+        |>> (fun stmt ->
+            interpret stmt
+            stmt)
+    )
+
 let rec interpret context env statement =
     match statement with
     | SNamesDeclaration declarations ->
