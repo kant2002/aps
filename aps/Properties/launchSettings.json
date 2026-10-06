@@ -1,0 +1,19 @@
+{
+  "profiles": {
+    "aps": {
+      "commandName": "Project"
+    },
+    "help": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    },
+    "prn": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/print.ap"
+    },
+    "name_declaration": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/name_declaration.ap"
+    }
+  }
+}
