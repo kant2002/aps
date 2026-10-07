@@ -42,11 +42,13 @@ let prnPrototype : AExternalFunction =
         printfn "%A" v
         VEmpty
 
-let mutable globalEnv =
+let createNewEnv() =
     {
         names = new Map<string, AlgebraicValue>([])
         externalFunctions = new Map<string, AExternalFunction>([("prn", prnPrototype)])
     }
+
+let mutable globalEnv = createNewEnv()
 
 let rec evaluateExpression env aExpr =
     match aExpr with
@@ -71,10 +73,20 @@ let rec evaluateExpression env aExpr =
         match env.externalFunctions |> Map.tryFind name with
         | Some func ->
             let evaluatedParams = parameters |> List.map (evaluateExpression env)
-            //func (if evaluatedParams.Length = 1 then evaluatedParams.Head else VArray evaluatedParams)
             func (VArray evaluatedParams)
         | None ->
             raise (NotImplementedException(sprintf "Cannot evaluate prefix expression for %s and parameters %A" name parameters))
+    | AApplicationExpression (name, parameter) -> 
+        match name with 
+        | AAtom name -> 
+            match env.externalFunctions |> Map.tryFind name with
+            | Some func ->
+                let evaluatedParams = evaluateExpression env parameter
+                func evaluatedParams
+            | None ->
+                raise (NotImplementedException(sprintf "Cannot evaluate application expression for %s and parameters %A" name parameter))
+        | _ ->
+            raise (NotImplementedException(sprintf "Cannot evaluate application expression for %A and parameters %A" name parameter))
     | _ -> raise (NotImplementedException(sprintf "Cannot evaluate %A" aExpr))
 
 type SourceContext = { source: string }

@@ -15,6 +15,10 @@
       "commandName": "Project",
       "commandLineArgs": "-i ../../../../samples/print.ap"
     },
+    "print_raw": {
+      "commandName": "Project",
+      "commandLineArgs": "-i ../../../../samples/print_raw.ap"
+    },
     "print_multiple": {
       "commandName": "Project",
       "commandLineArgs": "-i ../../../../samples/print_multiple.ap"
