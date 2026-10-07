@@ -182,101 +182,6 @@ let markDescription =
     |>> MarkDescription
 
 // Expressions
-let algebraicExpression, algebraicExpressionRef =
-    createParserForwardedToRef<AlgebraicExpression, unit>()
-
-let algebraicList =
-    //algebraicExpressionListSemicolon
-    let rec preprocess xs =
-        match xs with
-        | [ x ] -> x
-        | head :: tail -> AInfixExpression(head, ";", preprocess tail)
-        | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
-
-    sepBy1 algebraicExpression (ws >>. pstring ";" .>> ws) |>> preprocess
-
-let private primaryExpression =
-    attempt (int64Number .>> notFollowedBy (pchar '.'))
-    <|> (floatNumber)
-    <|> (quotedString |>> AString)
-    <|> attempt (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
-    <|> (aplanIdentifier |>> AAtom <!> "atom primary expression")
-    <|> (attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
-         <!> "empty primary expression")
-    <|> ((str "(" >>. ws >>. algebraicList .>> ws .>> str ")")
-         <!> "nested primary expression")
-
-let private algebraicExpressionList =
-    sepBy algebraicExpression (ws >>. pstring "," .>> ws)
-
-let private algebraicExpressionListSemicolon =
-    sepBy algebraicExpression (ws >>. pstring ";" .>> ws)
-
-let rewriteExpression =
-    tuple2
-        (pstring "rs" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
-         .>> ws
-         .>> str ")"
-         .>> ws
-         <!> "rewrite paramters")
-        algebraicExpression
-    <!> "rewrite body"
-    |>> ARewriteSystemExpression
-
-let procExpression =
-    tuple3
-        (pstring "proc" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
-         .>> ws
-         .>> str ")"
-         .>> ws
-         <!> "proc parameters")
-        (opt (
-            str "loc(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws
-            <!> "proc local parameters"
-        ))
-        (str "(" .>> ws >>. algebraicExpressionListSemicolon .>> ws .>> str ")"
-         <!> "proc local statements")
-    <!> "proc body"
-    |>> AProcExpression
-
-let private prefixExpression =
-    // attempt rewriteExpression
-    // <|>
-    attempt (
-        aplanIdentifier .>> ws .>> str "(" .>> ws .>>. (algebraicExpressionList)
-        .>> ws
-        .>> str ")"
-        |>> APrefixExpression
-        <!> "prefix () expression"
-    )
-    <|> attempt (
-        aplanIdentifier .>> ws .>> str "[" .>> ws .>>. algebraicExpression
-        .>> ws
-        .>> str "]"
-        |>> AArrayIndexingExpression
-        <!> "prefix [] expression"
-    )
-    <|> (primaryExpression <!> "prefix trivial")
-
-let private application =
-    attempt (
-        tuple2 (prefixExpression .>> ws <!> "application base") (algebraicExpression <!> "application argument")
-        |>> AApplicationExpression
-    )
-    <|> (prefixExpression <!> "application trivial")
-    // let rec preprocess xs =
-    //     match xs with
-    //     | [ x ] -> x
-    //     | head :: tail -> AApplicationExpression( head, preprocess tail )
-    //     | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
-    // sepBy1 prefixExpression ws |>> preprocess
-
-let private infixExpression =
-    tuple3
-        (application .>> ws <!> "infix application")
-        (infixNotation .>> ws)
-        (algebraicExpression <!> "infix application right")
-    |>> AInfixExpression
 
 let private infixOperator op priority =
     InfixOperator(op, spaces, priority, Associativity.Left, fun left right -> AInfixExpression(left, op, right))
@@ -284,47 +189,144 @@ let private infixOperator op priority =
 let private prefixOperator op priority =
     PrefixOperator(op, spaces, priority, false, fun right -> APrefixExpression(op, [ right ]))
 
-let private opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
-opp.TermParser <- ws >>. application .>> ws <!> "infix term"
+let createProgramParser() =
+    let algebraicExpression, algebraicExpressionRef =
+        createParserForwardedToRef<AlgebraicExpression, unit>()
 
-let setBinaryMark name priority symbol =
-    if symbol <> ";" || false then
-        opp.RemoveInfixOperator(symbol) |> ignore
-        opp.AddOperator(infixOperator symbol priority)
+    let algebraicList =
+        //algebraicExpressionListSemicolon
+        let rec preprocess xs =
+            match xs with
+            | [ x ] -> x
+            | head :: tail -> AInfixExpression(head, ";", preprocess tail)
+            | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
 
-let setUnaryMark name priority symbol =
-    opp.RemovePrefixOperator(symbol) |> ignore
-    opp.AddOperator(prefixOperator symbol priority)
+        sepBy1 algebraicExpression (ws >>. pstring ";" .>> ws) |>> preprocess
 
-let setDefaultMarks() =
-    setBinaryMark "COMMA" 7 ","
-    setBinaryMark "LL" 5 ";"
+    let primaryExpression =
+        attempt (int64Number .>> notFollowedBy (pchar '.'))
+        <|> (floatNumber)
+        <|> (quotedString |>> AString)
+        <|> attempt (str "VAL" .>> spaces >>. aplanIdentifier |>> AVal)
+        <|> (aplanIdentifier |>> AAtom <!> "atom primary expression")
+        <|> (attempt ((str "(" >>. ws >>. str ")") |>> (fun (_) -> AEmpty))
+             <!> "empty primary expression")
+        <|> ((str "(" >>. ws >>. algebraicList .>> ws .>> str ")")
+             <!> "nested primary expression")
 
-//algebraicExpressionRef := choice [ attempt infixExpression; application ]
-//algebraicExpressionRef := choice [ opp.ExpressionParser ]
-algebraicExpressionRef
-:= choice [ rewriteExpression; procExpression; opp.ExpressionParser ]
+    let algebraicExpressionList =
+        sepBy algebraicExpression (ws >>. pstring "," .>> ws)
 
-let assignmentStatement =
-    tuple3
-        (aplanIdentifier .>> ws <!> "assignment identifier")
-        (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws <!> "assignment index")
-        (str ":=" >>. ws >>. (algebraicExpression) .>> ws .>> str ";"
-         <!> "assignment expression")
-    |>> SAssignment
+    let algebraicExpressionListSemicolon =
+        sepBy algebraicExpression (ws >>. pstring ";" .>> ws)
 
-let statement =
-    ws
-    >>. choice
-            [
-                markDescription .>> spaces .>> str ";" |>> SMarkDescription
-                namesDeclaration .>> ws .>> str ";"
-                atomsDeclaration .>> spaces .>> str ";"
-                str "INCLUDE" >>. ws >>. anglePath |>> SInclude
-                assignmentStatement
-                str ";" |>> fun (_) -> SEmpty
-                ws1 |>> fun (_) -> SEmpty
-            ]
+    let rewriteExpression =
+        tuple2
+            (pstring "rs" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
+             .>> ws
+             .>> str ")"
+             .>> ws
+             <!> "rewrite paramters")
+            algebraicExpression
+        <!> "rewrite body"
+        |>> ARewriteSystemExpression
+
+    let procExpression =
+        tuple3
+            (pstring "proc" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
+             .>> ws
+             .>> str ")"
+             .>> ws
+             <!> "proc parameters")
+            (opt (
+                str "loc(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws
+                <!> "proc local parameters"
+            ))
+            (str "(" .>> ws >>. algebraicExpressionListSemicolon .>> ws .>> str ")"
+             <!> "proc local statements")
+        <!> "proc body"
+        |>> AProcExpression
+
+    let prefixExpression =
+        // attempt rewriteExpression
+        // <|>
+        attempt (
+            aplanIdentifier .>> ws .>> str "(" .>> ws .>>. (algebraicExpressionList)
+            .>> ws
+            .>> str ")"
+            |>> APrefixExpression
+            <!> "prefix () expression"
+        )
+        <|> attempt (
+            aplanIdentifier .>> ws .>> str "[" .>> ws .>>. algebraicExpression
+            .>> ws
+            .>> str "]"
+            |>> AArrayIndexingExpression
+            <!> "prefix [] expression"
+        )
+        <|> (primaryExpression <!> "prefix trivial")
+
+    let application =
+        attempt (
+            tuple2 (prefixExpression .>> ws <!> "application base") (algebraicExpression <!> "application argument")
+            |>> AApplicationExpression
+        )
+        <|> (prefixExpression <!> "application trivial")
+        // let rec preprocess xs =
+        //     match xs with
+        //     | [ x ] -> x
+        //     | head :: tail -> AApplicationExpression( head, preprocess tail )
+        //     | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" xs))
+        // sepBy1 prefixExpression ws |>> preprocess
+
+    let infixExpression =
+        tuple3
+            (application .>> ws <!> "infix application")
+            (infixNotation .>> ws)
+            (algebraicExpression <!> "infix application right")
+        |>> AInfixExpression
+    let opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
+    opp.TermParser <- ws >>. application .>> ws <!> "infix term"
+
+    let setBinaryMark name priority symbol =
+        if symbol <> ";" || false then
+            opp.RemoveInfixOperator(symbol) |> ignore
+            opp.AddOperator(infixOperator symbol priority)
+
+    let setUnaryMark name priority symbol =
+        opp.RemovePrefixOperator(symbol) |> ignore
+        opp.AddOperator(prefixOperator symbol priority)
+
+    let setDefaultMarks() =
+        setBinaryMark "COMMA" 7 ","
+        setBinaryMark "LL" 5 ";"
+
+    //algebraicExpressionRef := choice [ attempt infixExpression; application ]
+    //algebraicExpressionRef := choice [ opp.ExpressionParser ]
+    algebraicExpressionRef
+    := choice [ rewriteExpression; procExpression; opp.ExpressionParser ]
+
+    let assignmentStatement =
+        tuple3
+            (aplanIdentifier .>> ws <!> "assignment identifier")
+            (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws <!> "assignment index")
+            (str ":=" >>. ws >>. (algebraicExpression) .>> ws .>> str ";"
+             <!> "assignment expression")
+        |>> SAssignment
+
+    let statement =
+        ws
+        >>. choice
+                [
+                    markDescription .>> spaces .>> str ";" |>> SMarkDescription
+                    namesDeclaration .>> ws .>> str ";"
+                    atomsDeclaration .>> spaces .>> str ";"
+                    str "INCLUDE" >>. ws >>. anglePath |>> SInclude
+                    assignmentStatement
+                    str ";" |>> fun (_) -> SEmpty
+                    ws1 |>> fun (_) -> SEmpty
+                ]
+    {| statement = statement; setBinaryMark = setBinaryMark; setUnaryMark = setUnaryMark; setDefaultMarks = setDefaultMarks; algebraicExpression = algebraicExpression |}
 // (fun stream ->
 //     let reply1 = statement stream
 //     if reply1.Status = Ok then

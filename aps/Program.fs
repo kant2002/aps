@@ -25,7 +25,7 @@ let main (args) =
             printfn "%s" (parser.PrintUsage())
             Environment.Exit(0)
         let fileNames = results.GetResults Include_File
-        Parser.setDefaultMarks()
+        programParser.setDefaultMarks()
         for fileName in fileNames do
             let programCode = File.ReadAllText(fileName)
             interpretProgram { source = fileName } (programCode + " \n ; ")

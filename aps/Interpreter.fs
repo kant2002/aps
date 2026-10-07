@@ -85,13 +85,7 @@ let resolveIncludePath (sourceContext: SourceContext) (path: string) =
     else
         Path.Combine(Path.GetDirectoryName(sourceContext.source), path)
 
-let program interpret =
-    many (
-        statement
-        |>> (fun stmt ->
-            interpret stmt
-            stmt)
-    )
+let programParser = createProgramParser()
 
 let rec interpret context env statement =
     match statement with
@@ -140,10 +134,10 @@ let rec interpret context env statement =
                         printfn "Invalid arity for binary mark %s" name
                     else
                         printfn "Add binary mark code = %s with priority %d and symbol %s" name priority symbol
-                        setBinaryMark name (int priority) symbol
+                        programParser.setBinaryMark name (int priority) symbol
                 | UnaryMark(name, arity, priority) ->
                     printfn "UnaryMark: %A. This looks like function with priority %d" mark priority
-                    setUnaryMark name (int priority) name
+                    programParser.setUnaryMark name (int priority) name
                 | _ -> printfn "Mark: %A" mark
 
         env
@@ -158,6 +152,13 @@ let rec interpret context env statement =
 
 and interpretProgram context str =
     let str = str + ";"
+    let program interpret =
+        many (
+            programParser.statement
+            |>> (fun stmt ->
+                interpret stmt
+                stmt)
+        )
 
     let statementInterpreter statement =
         globalEnv <- interpret context globalEnv statement
