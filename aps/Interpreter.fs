@@ -24,7 +24,6 @@ let trace_statements = false
 let getSingleValue value =
     match value with
     | VArray [ singleValue ] -> singleValue
-    | VArray (head::tail) -> head
     | _ -> value
 
 let formatValue value =
@@ -40,7 +39,7 @@ let prnPrototype : AExternalFunction =
     fun v -> 
         let v = v |> getSingleValue |> formatValue
         printfn "%A" v
-        VEmpty
+        VInt64 1
 
 let createNewEnv() =
     {
@@ -49,8 +48,21 @@ let createNewEnv() =
     }
 
 let mutable globalEnv = createNewEnv()
+    
 
-let rec evaluateExpression env aExpr =
+let rec evaluateComma env left right =
+    let left = evaluateExpression env left
+    let right = evaluateExpression env right
+    VEmpty
+and evaluateTuple env left right =
+    let left = evaluateExpression env left
+    let right = evaluateExpression env right
+    match (left, right) with
+    | (VArray leftValues, VArray rightValues) -> VArray (leftValues @ rightValues)
+    | (VArray leftValues, rightValue) -> VArray (leftValues @ [ rightValue ])
+    | (leftValue, VArray rightValues) -> VArray (leftValue :: rightValues)
+    | (leftValue, rightValue) -> VArray [ leftValue; rightValue ]
+and evaluateExpression env aExpr =
     match aExpr with
     | AInt64 value -> VInt64 value
     | AFloat value -> VFloat value
@@ -87,6 +99,12 @@ let rec evaluateExpression env aExpr =
                 raise (NotImplementedException(sprintf "Cannot evaluate application expression for %s and parameters %A" name parameter))
         | _ ->
             raise (NotImplementedException(sprintf "Cannot evaluate application expression for %A and parameters %A" name parameter))
+    | AInfixExpression (left, op, right)
+        ->
+        match op with
+        | "," -> evaluateComma env left right
+        | ";" -> evaluateTuple env left right
+        | _ -> raise (NotImplementedException(sprintf "Cannot evaluate infix expression for op %s and parameters %A, %A" op left right))
     | _ -> raise (NotImplementedException(sprintf "Cannot evaluate %A" aExpr))
 
 type SourceContext = { source: string }
@@ -158,8 +176,8 @@ let rec interpret context env statement =
         printfn "Include file from: %A" path
         let fileName = resolveIncludePath context path
         let programCode = File.ReadAllText(fileName)
-        interpretProgram { context with source = fileName } programCode
-        printfn "Done processing include file from: %A" path
+        let result = interpretProgram { context with source = fileName } programCode
+        printfn "Done processing include file from: %A, exit code: %d" path result
         env
 
 and interpretProgram context str =
@@ -174,10 +192,17 @@ and interpretProgram context str =
 
     let statementInterpreter statement =
         globalEnv <- interpret context globalEnv statement
+        ()
 
     match run (program statementInterpreter) str with
-    | Success(result, _, position) when position.Index = str.Length -> ()
+    | Success(result, _, position) when position.Index = str.Length -> 
+        0
     | Success(result, _, position) when position.Index <> str.Length ->
         printfn ">>> Partial Success: %A, position: %A, index = %d" result position position.Index
-    | Failure(errorMsg, _, _) -> printfn "Failure: %s" errorMsg
-    | failure -> printfn "Generic Failure: %A" failure
+        -1
+    | Failure(errorMsg, _, _) -> 
+        printfn "Failure: %s" errorMsg
+        -2
+    | failure -> 
+        printfn "Generic Failure: %A" failure
+        -3

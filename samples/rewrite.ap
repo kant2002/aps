@@ -1,0 +1,37 @@
+INCLUDE <../../../../prog/aps.windows/include/std.ap>
+INCLUDE <../../../../prog/aps.windows/include/gen_obj.ap>
+INCLUDE <../../../../prog/aps.windows/include/strat.ap>
+
+NAMES R,T,RR;
+
+MARK F(1);
+
+T:=F(7);
+RR:=(
+  F(0) = 1;
+  F(1) = 1;
+  F(n) = F(n-1)+F(n-2)
+);
+
+R:=rs(n)(
+  F(0) = 1,
+  F(1) = 1,
+  F(n) = F(n-1)+F(n-2)
+);
+
+
+NAME sub1;
+sub1:=proc(x,y)loc(R)(
+    R:=rs()x;
+    y-->new(y);
+    ntb(y,R);
+    return y
+);
+
+
+task:=(
+  /* you can try use trace(R) to see how it works */
+  /* trace(R); */
+  applytb(T,R);
+  prn(T)
+);

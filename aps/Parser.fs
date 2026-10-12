@@ -13,10 +13,10 @@ type AlgebraicExpression =
     | AIdentifier of string
     | AVal of string
     | APrefixExpression of (string * (AlgebraicExpression list))
-    | ARewriteSystemExpression of AlgebraicExpression list * AlgebraicExpression
     | AInfixExpression of AlgebraicExpression * string * AlgebraicExpression
     | AApplicationExpression of AlgebraicExpression * AlgebraicExpression
     | AArrayIndexingExpression of string * AlgebraicExpression
+    | ARewriteSystemExpression of AlgebraicExpression list * AlgebraicExpression
     | AProcExpression of AlgebraicExpression list * (AlgebraicExpression list option) * AlgebraicExpression list
 
 type MarkArity =
@@ -231,6 +231,95 @@ let createProgramParser() =
         <!> "rewrite body"
         |>> ARewriteSystemExpression
 
+    let getList (value: AlgebraicExpression) =
+        let rec getListCore sep value = 
+            match value with
+            | AInfixExpression(left, newsep, right) when sep = newsep -> (getListCore sep left) @ (getListCore sep right)
+            | AEmpty -> []
+            | _ -> [value]
+
+        match value with
+            | AInfixExpression(left, ",", right) -> getListCore "," value
+            | AInfixExpression(left, ";", right) -> getListCore ";" value
+            | AEmpty -> []
+            | _ -> raise (invalidOp (sprintf "Invalid grammar for the application. Cannot have 0 arguments. %A" value))
+    let opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
+
+    let setBinaryMark name priority symbol =
+        //if symbol <> ";" || false then
+            opp.RemoveInfixOperator(symbol) |> ignore
+            opp.AddOperator(infixOperator symbol priority)
+
+    let setUnaryMark name priority symbol =
+        opp.RemovePrefixOperator(symbol) |> ignore
+        opp.AddOperator(prefixOperator symbol priority)
+
+    let setDefaultMarks() =
+        // Predicates
+        setBinaryMark "POW"  60 "^"
+        setBinaryMark "MOD"  59 "mod"  
+        setBinaryMark "Mult" 58 "*" 
+        setBinaryMark "DIV"  57 "/"  
+        setBinaryMark "MLT"  56 "$"  
+        setBinaryMark "SUB"  55 "-"  
+        setBinaryMark "ADD"  54 "+"  
+
+        // Predicates
+        setBinaryMark "LE"  40 "<="
+        setBinaryMark "LT"  40 "<"  // LS in the APS 
+        setBinaryMark "GE"  40 ">=" // ME in the APS
+        setBinaryMark "GT"  40 ">"  // MR in the APS
+        setBinaryMark "EQ"  11 "=="
+        setBinaryMark "EQU" 11 "="
+
+        // Logical connections
+        setUnaryMark "~" 30 "~"
+        setBinaryMark "AND" 29 "&"
+        setBinaryMark "OR"  28 "|/"
+        setBinaryMark "IFF" 27 "<=>"
+
+        // Imperative APLAN
+        setBinaryMark "SET" 20 "-->"
+        setBinaryMark "ASS" 20 ":="
+        setBinaryMark "ELSE" 19 "else"
+        setBinaryMark "IF"  18 "->"
+
+        // Separators
+        setBinaryMark "COMMA" 7 ","
+        //setBinaryMark "LL" 5 ";"
+
+        // gen_obj addition for smoke testing, remove after implementation wouldbe more mature
+        setBinaryMark "COLON" 8 ":"
+        setBinaryMark "DOT"   62 "."
+
+        setBinaryMark "itr"   60 "^*"
+        setBinaryMark "caten" 50 "!"
+        setBinaryMark "parc"  28 "||"
+        setBinaryMark "cpar"  28 "|^"
+        setBinaryMark "comb"  59 "><"
+        setBinaryMark "ccomb" 59 ">^"
+
+
+
+    let mutable semicolonsRequest = 0
+    let injectSemicolon state = 
+        semicolonsRequest <- semicolonsRequest + 1
+        if semicolonsRequest = 1 then
+            setBinaryMark "LL" 5 ";"
+        state
+
+    let suppressSemicolon state = 
+        semicolonsRequest <- semicolonsRequest - 1
+        if semicolonsRequest = 0 then
+            opp.RemoveInfixOperator(";") |> ignore
+        state
+
+    let algebraicExpressionX = 
+        choice [
+            str "(" >>. ws |>> injectSemicolon >>. algebraicExpression .>> ws |>> suppressSemicolon .>> str ")" <!> "nested expression with ; enabled"
+            algebraicExpression <!> "simple expression"
+        ]
+
     let procExpression =
         tuple3
             (pstring "proc" .>> ws .>> str "(" .>> ws >>. algebraicExpressionList
@@ -242,22 +331,23 @@ let createProgramParser() =
                 str "loc(" .>> ws >>. algebraicExpressionList .>> ws .>> str ")" .>> ws
                 <!> "proc local parameters"
             ))
-            (str "(" .>> ws >>. algebraicExpressionListSemicolon .>> ws .>> str ")"
+            (algebraicExpressionX
              <!> "proc local statements")
         <!> "proc body"
-        |>> AProcExpression
+        |>> fun (parameters, localParameters, statements) -> AProcExpression(parameters, localParameters, [statements])
 
     let prefixExpression =
         // attempt rewriteExpression
         // <|>
+        //attempt (
+        //    aplanIdentifier .>> ws .>> str "(" .>> ws .>>. (algebraicExpressionList)
+        //    .>> ws
+        //    .>> str ")"
+        //    |>> APrefixExpression
+        //    <!> "prefix () expression"
+        //)
+        // <|>
         attempt (
-            aplanIdentifier .>> ws .>> str "(" .>> ws .>>. (algebraicExpressionList)
-            .>> ws
-            .>> str ")"
-            |>> APrefixExpression
-            <!> "prefix () expression"
-        )
-        <|> attempt (
             aplanIdentifier .>> ws .>> str "[" .>> ws .>>. algebraicExpression
             .>> ws
             .>> str "]"
@@ -285,21 +375,7 @@ let createProgramParser() =
             (infixNotation .>> ws)
             (algebraicExpression <!> "infix application right")
         |>> AInfixExpression
-    let opp = new OperatorPrecedenceParser<AlgebraicExpression, unit, unit>()
     opp.TermParser <- ws >>. application .>> ws <!> "infix term"
-
-    let setBinaryMark name priority symbol =
-        if symbol <> ";" || false then
-            opp.RemoveInfixOperator(symbol) |> ignore
-            opp.AddOperator(infixOperator symbol priority)
-
-    let setUnaryMark name priority symbol =
-        opp.RemovePrefixOperator(symbol) |> ignore
-        opp.AddOperator(prefixOperator symbol priority)
-
-    let setDefaultMarks() =
-        setBinaryMark "COMMA" 7 ","
-        setBinaryMark "LL" 5 ";"
 
     //algebraicExpressionRef := choice [ attempt infixExpression; application ]
     //algebraicExpressionRef := choice [ opp.ExpressionParser ]
@@ -310,7 +386,7 @@ let createProgramParser() =
         tuple3
             (aplanIdentifier .>> ws <!> "assignment identifier")
             (opt (str "[" .>> ws >>. pint32 .>> ws .>> str "]") .>> ws <!> "assignment index")
-            (str ":=" >>. ws >>. (algebraicExpression) .>> ws .>> str ";"
+            (str ":=" >>. ws >>. (algebraicExpressionX) .>> ws .>> str ";"
              <!> "assignment expression")
         |>> SAssignment
 

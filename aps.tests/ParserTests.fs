@@ -109,11 +109,11 @@ let ``Primitive expression`` () =
 [<Fact>]
 let ``Prefix expression`` () =
     let s = createProgramParser()
-    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser s.algebraicExpression "F(2)")
-    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser s.algebraicExpression "F( 2)")
-    Assert.Equal(APrefixExpression("F", [ AInt64 2L ]), runParser s.algebraicExpression "F( 2 )")
+    Assert.Equal(AApplicationExpression (AAtom "F", AInt64 2L), runParser s.algebraicExpression "F(2)")
+    Assert.Equal(AApplicationExpression (AAtom "F", AInt64 2L), runParser s.algebraicExpression "F( 2)")
+    Assert.Equal(AApplicationExpression (AAtom "F", AInt64 2L), runParser s.algebraicExpression "F( 2 )")
     Assert.Equal(AArrayIndexingExpression("a", AInt64 5L), runParser s.algebraicExpression "a[5]")
-    Assert.Equal(APrefixExpression("a", [ AString "123" ]), runParser s.algebraicExpression "a(\"123\")")
+    Assert.Equal(AApplicationExpression (AAtom "a", AString "123"), runParser s.algebraicExpression "a(\"123\")")
 
 [<Fact>]
 let ``Infix expression`` () =
@@ -145,28 +145,27 @@ let ``Asignment`` () =
 let ``Application expression`` () =
     let s = createProgramParser()
     Assert.Equal(
-        AApplicationExpression(APrefixExpression("test", []), APrefixExpression("loc1", [ AAtom "Term" ])),
+        AApplicationExpression(AAtom "test",
+            AApplicationExpression(AEmpty, AApplicationExpression (AAtom "loc1", AAtom "Term"))),
         runParser s.algebraicExpression "test()loc1(Term)"
     )
 
     Assert.Equal(
-        AApplicationExpression(
-            APrefixExpression("test", []),
-            AApplicationExpression(APrefixExpression("loc1", [ AAtom "Term" ]), AEmpty)
-        ),
+        AApplicationExpression(AAtom "test",
+           AApplicationExpression(AEmpty,
+              AApplicationExpression(AAtom "loc1", AApplicationExpression (AAtom "Term", AEmpty)))),
         runParser s.algebraicExpression "test()loc1(Term)()"
     )
 
     Assert.Equal(
-        AApplicationExpression(
-            APrefixExpression("test", []),
-            AApplicationExpression(APrefixExpression("loc1", [ AAtom "Term" ]), AAtom "x")
-        ),
+        AApplicationExpression(AAtom "test",
+           AApplicationExpression(AEmpty,
+              AApplicationExpression(AAtom "loc1", AApplicationExpression (AAtom "Term", AAtom "x")))),
         runParser s.algebraicExpression "test()loc1(Term)x"
     )
 
     Assert.Equal(
-        AApplicationExpression(APrefixExpression("test", []), AAtom "x"),
+        AApplicationExpression(AAtom "test", AApplicationExpression (AEmpty, AAtom "x")),
         runParser s.algebraicExpression "test()x"
     )
 
@@ -178,7 +177,20 @@ let ``Rewrite system`` () =
     let s = createProgramParser()
     s.setBinaryMark "MR" 58 ">" // More (strange names in hindsight)
     s.setBinaryMark "SEM" 5 ";"
+    s.setBinaryMark "ASS" 20 ":="
 
+    let procTest = "sub1:=proc(x,y)loc(R)(
+                R:=rs()x;
+                return y
+            );"
+    Assert.Equal(
+        SAssignment("sub1", None,
+           AProcExpression([AAtom "x"; AAtom "y"], Some [AAtom "R"],
+              [AInfixExpression(AAtom "R", ":=",
+                  AApplicationExpression(AAtom "rs",
+                     AApplicationExpression(AEmpty,
+                        AInfixExpression(AAtom "x", ";",
+                           AApplicationExpression (AAtom "return", AAtom "y")))))])), runParser s.statement procTest)
     Assert.Equal(ARewriteSystemExpression([], AAtom "x"), runParser s.algebraicExpression "rs()x")
     Assert.Equal(SAssignment("R", None, ARewriteSystemExpression([], AAtom "x")), runParser s.statement "R:=rs()x;")
     Assert.Equal(SAssignment("R", None, ARewriteSystemExpression([], AAtom "x")), runParser s.statement "R:=rs()\nx;")
@@ -210,34 +222,21 @@ let ``Proc definition statements`` () =
     s.setBinaryMark "SEM" 5 ";"
 
     Assert.Equal(
-        SAssignment(
-            "p",
-            None,
-            AProcExpression(
-                [ AAtom "x" ],
-                Some [ AAtom "y" ],
-                [
-                    AInfixExpression(
-                        AInfixExpression(
-                            AInfixExpression(
-                                AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
-                                ",",
-                                APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                            ),
-                            ",",
-                            APrefixExpression(
-                                "can_ord",
-                                [
-                                    AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
-                                ]
-                            )
-                        ),
-                        ",",
-                        APrefixExpression("return", [ AAtom "x" ])
-                    )
-                ]
-            )
-        ),
+        SAssignment
+            ("p", None,
+            AProcExpression
+                ([AAtom "x"], Some [AAtom "y"],
+                [AInfixExpression(AAtom "x", "-->",
+                    AApplicationExpression(AAtom "copy",
+                        AInfixExpression(AAtom "x", ",",
+                            AApplicationExpression
+                                (AAtom "ntb",
+                                AInfixExpression(AInfixExpression (AAtom "x", ",", AAtom "R"), ",",
+                                    AApplicationExpression(AAtom "can_ord",
+                                        AInfixExpression(AInfixExpression
+                                            (AInfixExpression (AAtom "x", ",", AAtom "R1"),
+                                            ",", AAtom "Q1"), ",",
+                                        AApplicationExpression (AAtom "return", AAtom "x"))))))))])),
         runParser
             s.statement
             """p:=proc(x)loc(y)(
@@ -249,34 +248,26 @@ let ``Proc definition statements`` () =
     )
 
     Assert.Equal(
-        SAssignment(
-            "p",
-            None,
-            AProcExpression(
-                [ AAtom "x" ],
-                None,
-                [
-                    AInfixExpression(
-                        AInfixExpression(
-                            AInfixExpression(
-                                AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ])),
-                                ",",
-                                APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                            ),
-                            ",",
-                            APrefixExpression(
-                                "can_ord",
-                                [
-                                    AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
-                                ]
-                            )
-                        ),
-                        ",",
-                        APrefixExpression("return", [ AAtom "x" ])
-                    )
-                ]
-            )
-        ),
+        SAssignment("p", None,
+           AProcExpression
+             ([AAtom "x"], None,
+              [AInfixExpression
+                 (AAtom "x", "-->",
+                  AApplicationExpression
+                    (AAtom "copy",
+                     AInfixExpression
+                       (AAtom "x", ",",
+                        AApplicationExpression
+                          (AAtom "ntb",
+                           AInfixExpression
+                             (AInfixExpression (AAtom "x", ",", AAtom "R"), ",",
+                              AApplicationExpression
+                                (AAtom "can_ord",
+                                 AInfixExpression
+                                   (AInfixExpression
+                                      (AInfixExpression (AAtom "x", ",", AAtom "R1"),
+                                       ",", AAtom "Q1"), ",",
+                                    AApplicationExpression (AAtom "return", AAtom "x"))))))))])),
         runParser
             s.statement
             """p:=proc(x)(
@@ -291,21 +282,24 @@ let ``Proc definition statements`` () =
         SAssignment(
             "p",
             None,
-            AProcExpression(
-                [ AAtom "x" ],
-                None,
-                [
-                    AInfixExpression(AAtom "x", "-->", APrefixExpression("copy", [ AAtom "x" ]))
-                    APrefixExpression("ntb", [ AInfixExpression(AAtom "x", ",", AAtom "R") ])
-                    APrefixExpression(
-                        "can_ord",
-                        [
-                            AInfixExpression(AInfixExpression(AAtom "x", ",", AAtom "R1"), ",", AAtom "Q1")
-                        ]
-                    )
-                    APrefixExpression("return", [ AAtom "x" ])
-                ]
-            )
+            AProcExpression([AAtom "x"], None,
+              [AInfixExpression
+                 (AAtom "x", "-->",
+                  AApplicationExpression
+                    (AAtom "copy",
+                     AInfixExpression
+                       (AAtom "x", ";",
+                        AApplicationExpression
+                          (AAtom "ntb",
+                           AInfixExpression
+                             (AInfixExpression (AAtom "x", ",", AAtom "R"), ";",
+                              AApplicationExpression
+                                (AAtom "can_ord",
+                                 AInfixExpression
+                                   (AInfixExpression
+                                      (AInfixExpression (AAtom "x", ",", AAtom "R1"),
+                                       ",", AAtom "Q1"), ";",
+                                    AApplicationExpression (AAtom "return", AAtom "x"))))))))])
         ),
         runParser
             s.statement
@@ -321,7 +315,7 @@ let ``Proc definition statements`` () =
 let ``Simple task usage`` () =
     let s = createProgramParser()
     s.setBinaryMark "COMMA" 7 ","
-    Assert.Equal( SAssignment ("task", None, APrefixExpression("prn", [ AString "======================================= " ])), runParser s.statement "task:=(
+    Assert.Equal( SAssignment ("task", None, AApplicationExpression(AAtom "prn", AString "======================================= ")), runParser s.statement "task:=(
         prn(\"======================================= \")
     );")
 
@@ -329,7 +323,27 @@ let ``Simple task usage`` () =
 let ``Multiple task statements`` () =
     let s = createProgramParser()
     s.setBinaryMark "COMMA" 7 ","
-    Assert.Equal( SAssignment ("task", None, AInfixExpression(APrefixExpression("prn", [ AString "======================================= " ]), ",", APrefixExpression("prn", [ AString "======================================= " ]))), runParser s.statement "task:=(
+    Assert.Equal( SAssignment ("task", None, AApplicationExpression(AAtom "prn",
+      AInfixExpression
+        (AString "======================================= ", ",",
+         AApplicationExpression
+           (AAtom "prn", AString "======================================= ")))), 
+           runParser s.statement "task:=(
         prn(\"======================================= \"), prn(\"======================================= \")
+    );")
+
+[<Fact>]
+let ``Statements inside tuples`` () =
+    let s = createProgramParser()
+    s.setBinaryMark "COMMA" 7 ","
+    //s.setBinaryMark "LL" 5 ";"
+    s.setBinaryMark "ASS" 20 ":="
+
+    Assert.Equal( SAssignment
+        ("task", None,
+        AApplicationExpression(AAtom "prn",
+            AInfixExpression(AString "======================================= ", ";",
+                AApplicationExpression(AAtom "prn", AString "======================================= ")))), runParser s.statement "task:=(
+        prn(\"======================================= \"); prn(\"======================================= \")
     );")
 

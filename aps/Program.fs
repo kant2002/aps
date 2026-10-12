@@ -26,7 +26,11 @@ let main (args) =
             Environment.Exit(0)
         let fileNames = results.GetResults Include_File
         programParser.setDefaultMarks()
+        //printfn "Processing file: %A" fileNames
         for fileName in fileNames do
-            let programCode = File.ReadAllText(fileName)
-            interpretProgram { source = fileName } (programCode + " \n ; ")
-    0
+            //printfn "Processing file: '%s'" fileName
+            let programCode = File.ReadAllText(fileName.Trim())
+            let result = interpretProgram { source = fileName } (programCode + " \n ; ")
+            if result <> 0 then
+                Environment.Exit(result)
+        0
